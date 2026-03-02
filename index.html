@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MK Audiovisual - Sistema de Contrato</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    
+    <!-- Bibliotecas Externas -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Google Drive API Unificada (Sistema 1 e 2) -->
+    <script src="mk-drive-api-unificado.js"></script>
+    
+    <!-- Configuração Redes Sociais -->
+    <script src="config-redes-sociais.js"></script>
+    
+    <style>
+        :root { --primary: #0a0a0a; --accent: #715d21; }
+        body { font-family: 'Montserrat', sans-serif; background-color: #f8f8f8; color: #1a1a1a; overflow-x: hidden; }
+        .luxury-text { font-family: 'Playfair Display', serif; }
+        .glass-card { background: #fff; border: 1px solid #eee; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border-radius: 8px; }
+        
+        /* Assinatura */
+        .signature-wrapper { border: 2px solid #000; background: #fff; height: 200px; position: relative; width: 100%; }
+        .signature-pad { position: absolute; left: 0; top: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+        
+        .step-inactive { display: none; }
+        #map { height: 250px; width: 100%; border: 1px solid #000; border-radius: 4px; z-index: 1; }
+        
+        /* Cards de Serviço */
+        .service-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border: 2px solid transparent; cursor: pointer; position: relative; }
+        .service-card.selected { border-color: var(--accent); background-color: #fefcf5; transform: translateY(-5px); }
+        .service-card:hover:not(.selected) { border-color: #ddd; }
+
+        /* Intro de Agradecimento */
+        #final-intro { 
+            display: none; 
+            position: fixed; 
+            inset: 0; 
+            background: #000; 
+            z-index: 9999; 
+            color: #c5a02e; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            text-align: center; 
+            padding: 2rem; 
+        }
+        .fade-in { animation: fadeIn 1.2s ease-out forwards; opacity: 0; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Redes Sociais */
+        .social-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        .social-icon:hover {
+            transform: translateY(-3px) scale(1.1);
+        }
+        .social-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TELA FINAL (INTRO) -->
+    <div id="final-intro">
+        <div class="max-w-3xl">
+            <h2 class="luxury-text text-5xl md:text-7xl mb-8 fade-in" style="animation-delay: 0.3s;">Muito obrigado pela sua preferência!</h2>
+            <div class="h-px bg-[#c5a02e] w-32 mx-auto mb-8 fade-in" style="animation-delay: 0.6s;"></div>
+            <p class="text-2xl md:text-3xl uppercase tracking-[0.4em] mb-6 fade-in" style="animation-delay: 0.9s;">Nós somos a MK Audiovisual</p>
+            <p class="text-white text-xl md:text-2xl italic font-light fade-in" style="animation-delay: 1.4s;">
+                "O melhor para o seu evento. É uma honra estarmos juntos no seu sonho!"
+            </p>
+            <div class="mt-16 fade-in" style="animation-delay: 2.2s;">
+                <p class="text-[10px] text-gray-500 uppercase tracking-widest mb-6">Seu contrato completo foi gerado e descarregado.</p>
+                <button onclick="location.reload()" class="px-10 py-4 border border-[#c5a02e] text-[#c5a02e] hover:bg-[#c5a02e] hover:text-black transition-all font-bold uppercase text-xs mb-8">Reiniciar Sistema</button>
+                
+                <!-- Redes Sociais -->
+                <div class="flex justify-center gap-4 mt-8 fade-in" style="animation-delay: 2.5s;">
+                    <a href="https://www.instagram.com/mkaudiovisual" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="Instagram">
+                        <svg fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.facebook.com/mkaudiovisual" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="Facebook">
+                        <svg fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
+                    </a>
+                    <a href="https://wa.me/5511999999999" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="WhatsApp">
+                        <svg fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                        </svg>
+                    </a>
+                    <a href="https://www.youtube.com/@mkaudiovisual" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="YouTube">
+                        <svg fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                        </svg>
+                    </a>
+                </div>
+                <p class="text-[9px] text-gray-600 mt-4 fade-in" style="animation-delay: 2.8s;">Siga-nos nas redes sociais</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- CABEÇALHO -->
+    <header class="bg-black text-white py-16 border-b-4 border-[#c5a02e] text-center relative">
+        <h1 class="luxury-text text-6xl md:text-8xl font-bold tracking-tighter text-[#c5a02e]">MK</h1>
+        <p class="uppercase tracking-[0.6em] text-[11px] mt-2 font-bold text-gray-400">Audiovisual • Luxury Events</p>
+        <div class="absolute top-4 right-4 flex gap-2">
+            <button id="btn-test-connection" onclick="testarConexao()" class="px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase hover:bg-blue-700 transition-colors">
+                🧪 Testar Conexão
+            </button>
+            <button id="btn-drive-login" onclick="handleDriveLogin()" class="px-4 py-2 bg-[#c5a02e] text-black text-xs font-bold uppercase hover:bg-[#b8941f] transition-colors">
+                Conectar Google Drive
+            </button>
+            <button id="btn-drive-stats" onclick="showDriveStats()" class="px-4 py-2 bg-gray-700 text-white text-xs font-bold uppercase hover:bg-gray-600 transition-colors hidden">
+                Ver Contratos
+            </button>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-12 max-w-5xl">
+        <!-- PROGRESSO -->
+        <div class="mb-12 flex justify-center items-center gap-4">
+            <div id="dot-1" class="w-4 h-4 rounded-full bg-[#c5a02e] transition-colors duration-500"></div>
+            <div class="w-16 h-0.5 bg-gray-200"></div>
+            <div id="dot-2" class="w-4 h-4 rounded-full bg-gray-200 transition-colors duration-500"></div>
+            <div class="w-16 h-0.5 bg-gray-200"></div>
+            <div id="dot-3" class="w-4 h-4 rounded-full bg-gray-200 transition-colors duration-500"></div>
+            <div class="w-16 h-0.5 bg-gray-200"></div>
+            <div id="dot-4" class="w-4 h-4 rounded-full bg-gray-200 transition-colors duration-500"></div>
+        </div>
+
+        <!-- ETAPA 1: SERVIÇOS -->
+        <section id="step1" class="fade-in">
+            <h2 class="text-center luxury-text text-3xl mb-10 uppercase tracking-widest">Escolha os Serviços</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Plataforma 360 -->
+                <div id="card-360" class="glass-card service-card p-6" onclick="toggleService('360', 'Plataforma 360º')">
+                    <h3 class="font-bold text-sm uppercase">Plataforma 360º</h3>
+                    <input type="checkbox" id="check-360" class="hidden">
+                    <div id="extra-360" class="hidden mt-4 pt-4 border-t" onclick="event.stopPropagation()">
+                        <label class="text-[10px] font-bold uppercase text-gray-400 block mb-2">Horas de Uso:</label>
+                        <input type="number" id="hours-360" value="3" min="1" class="w-full p-2 border-b-2 border-black outline-none bg-transparent">
+                    </div>
+                </div>
+                <!-- Pista Paris -->
+                <div id="card-pista" class="glass-card service-card p-6" onclick="toggleService('pista', 'Pista Paris')">
+                    <h3 class="font-bold text-sm uppercase">Pista Paris</h3>
+                    <input type="checkbox" id="check-pista" class="hidden">
+                    <p class="text-[9px] mt-2 text-gray-400">Evento Completo</p>
+                </div>
+                <!-- Som e Iluminação -->
+                <div id="card-som" class="glass-card service-card p-6" onclick="toggleService('som', 'Som e Iluminação')">
+                    <h3 class="font-bold text-sm uppercase">Som e Iluminação</h3>
+                    <input type="checkbox" id="check-som" class="hidden">
+                    <div id="extra-som" class="hidden mt-4 pt-4 border-t" onclick="event.stopPropagation()">
+                        <label class="text-[10px] font-bold uppercase text-gray-400 block mb-2">Horas de Uso:</label>
+                        <input type="number" id="hours-som" value="4" min="1" class="w-full p-2 border-b-2 border-black outline-none bg-transparent">
+                    </div>
+                </div>
+                <!-- DJ Profissional -->
+                <div id="card-dj" class="glass-card service-card p-6" onclick="toggleService('dj', 'DJ Profissional')">
+                    <h3 class="font-bold text-sm uppercase">DJ Profissional</h3>
+                    <input type="checkbox" id="check-dj" class="hidden">
+                    <div id="extra-dj" class="hidden mt-4 pt-4 border-t" onclick="event.stopPropagation()">
+                        <label class="text-[10px] font-bold uppercase text-gray-400 block mb-2">Horas de Uso:</label>
+                        <input type="number" id="hours-dj" value="4" min="1" class="w-full p-2 border-b-2 border-black outline-none bg-transparent">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-12 text-center">
+                <button onclick="goToStep(2)" class="bg-black text-[#c5a02e] px-16 py-5 font-bold uppercase tracking-widest hover:scale-105 transition-transform border border-[#c5a02e]">Avançar</button>
+            </div>
+        </section>
+
+        <!-- ETAPA 2: LOCALIZAÇÃO -->
+        <section id="step2" class="step-inactive fade-in">
+            <div class="glass-card p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="space-y-5">
+                    <h3 class="font-bold uppercase text-xs text-gray-400 tracking-widest">Detalhes do Evento</h3>
+                    <input type="text" id="dest-cep" maxlength="9" oninput="formatarCEP(this)" onblur="handleCep(this)" class="w-full p-4 border-b-2 border-gray-200 outline-none focus:border-black transition-colors" placeholder="CEP (00000-000)">
+                    <p id="cep-status" class="text-xs mt-1"></p>
+                    <input type="text" id="dest-street" class="w-full p-4 border-b-2 border-gray-200 outline-none" placeholder="Endereço Completo">
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" id="dest-number" class="p-4 border-b-2 border-black outline-none" placeholder="Número">
+                        <input type="text" id="dest-city" class="p-4 border-b-2 border-gray-200 outline-none bg-gray-50" placeholder="Cidade/UF">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 pt-4">
+                        <input type="date" id="event-date" class="p-4 border-b-2 border-gray-200 outline-none">
+                        <input type="time" id="event-time" class="p-4 border-b-2 border-gray-200 outline-none">
+                    </div>
+                </div>
+                <div id="map" class="shadow-inner"></div>
+            </div>
+            <div class="mt-10 flex justify-between">
+                <button onclick="goToStep(1)" class="text-xs font-bold uppercase text-gray-400">Voltar</button>
+                <button onclick="validateLogistics()" class="bg-black text-[#c5a02e] px-12 py-4 font-bold uppercase tracking-widest">Próximo</button>
+            </div>
+        </section>
+
+        <!-- ETAPA 3: CLIENTE -->
+        <section id="step3" class="step-inactive fade-in">
+            <div class="glass-card p-10 max-w-2xl mx-auto space-y-6">
+                <h3 class="luxury-text text-2xl uppercase text-center mb-6">Identificação</h3>
+                <input type="text" id="client-name" class="w-full p-4 border-b-2 border-gray-200 outline-none focus:border-black uppercase transition-colors" placeholder="Nome Completo do Contratante" required onkeypress="if(event.key === 'Enter') document.getElementById('client-id').focus()">
+                <input type="text" id="client-id" class="w-full p-4 border-b-2 border-gray-200 outline-none focus:border-black transition-colors" placeholder="CPF ou CNPJ" required onkeypress="if(event.key === 'Enter') document.getElementById('client-phone').focus()">
+                <input type="tel" id="client-phone" class="w-full p-4 border-b-2 border-gray-200 outline-none focus:border-black transition-colors" placeholder="WhatsApp / Telefone" onkeypress="if(event.key === 'Enter') validateClient()">
+            </div>
+            <div class="mt-10 flex justify-between">
+                <button onclick="goToStep(2)" class="text-xs font-bold uppercase text-gray-400 hover:text-black transition-colors">Voltar</button>
+                <button onclick="validateClient()" class="bg-black text-[#c5a02e] px-12 py-4 font-bold uppercase tracking-widest hover:bg-gray-900 transition-colors">Revisar Contrato</button>
+            </div>
+        </section>
+
+        <!-- ETAPA 4: CONTRATO -->
+        <section id="step4" class="step-inactive fade-in">
+            <div class="glass-card p-10" id="contract-area">
+                <div id="contract-view" class="text-sm leading-relaxed text-justify mb-12 p-8 border bg-gray-50 max-h-[400px] overflow-y-auto">
+                    <!-- Gerado via JS -->
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-end">
+                    <div class="space-y-4">
+                        <p class="text-center text-[10px] font-bold uppercase tracking-widest text-[#c5a02e]">Assinatura do Cliente</p>
+                        <div class="signature-wrapper">
+                            <canvas id="signature-canvas" class="signature-pad"></canvas>
+                        </div>
+                        <button onclick="signaturePad.clear()" class="w-full text-[10px] text-red-500 font-bold uppercase tracking-widest">Limpar Assinatura</button>
+                    </div>
+                    <div class="text-center pb-10">
+                        <div class="w-48 h-[1px] bg-black mx-auto mb-2"></div>
+                        <p class="text-[10px] font-bold uppercase">MK Audiovisual</p>
+                        <p class="text-[9px] text-gray-400 uppercase italic">Contratada Responsável</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-12 text-center">
+                <button onclick="finalize()" class="bg-[#c5a02e] text-black px-24 py-6 font-bold uppercase tracking-[0.3em] shadow-xl hover:scale-105 transition-transform">Concluir e Assinar</button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const mkCoords = { lat: -23.2847, lng: -46.7458 };
+        let map, signaturePad;
+        let selectedServices = [];
+
+        window.onload = () => {
+            // Inicializar Mapa
+            map = L.map('map').setView([mkCoords.lat, mkCoords.lng], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.marker([mkCoords.lat, mkCoords.lng]).addTo(map).bindPopup("MK Audiovisual Base").openPopup();
+
+            // Inicializar Assinatura
+            const canvas = document.getElementById('signature-canvas');
+            signaturePad = new SignaturePad(canvas, { backgroundColor: 'white' });
+        };
+
+        function toggleService(id, name) {
+            const cb = document.getElementById(`check-${id}`);
+            const card = document.getElementById(`card-${id}`);
+            const extra = document.getElementById(`extra-${id}`);
+            
+            cb.checked = !cb.checked;
+            cb.checked ? card.classList.add('selected') : card.classList.remove('selected');
+            if(extra) cb.checked ? extra.classList.remove('hidden') : extra.classList.add('hidden');
+            
+            if(cb.checked) { if(!selectedServices.includes(name)) selectedServices.push(name); }
+            else { selectedServices = selectedServices.filter(s => s !== name); }
+        }
+
+        // Formatar CEP com máscara
+        function formatarCEP(input) {
+            let valor = input.value.replace(/\D/g, '');
+            if (valor.length > 5) {
+                valor = valor.substring(0, 5) + '-' + valor.substring(5, 8);
+            }
+            input.value = valor;
+            
+            // Limpar status
+            const statusEl = document.getElementById('cep-status');
+            if (statusEl) {
+                statusEl.textContent = '';
+                statusEl.className = 'text-xs mt-1';
+            }
+        }
+
+        // Buscar CEP
+        async function handleCep(input) {
+            const cepStatus = document.getElementById('cep-status');
+            const cepInput = document.getElementById('dest-cep');
+            
+            // Limpar status anterior
+            if (cepStatus) {
+                cepStatus.textContent = '';
+                cepStatus.className = 'text-xs mt-1';
+            }
+            
+            // Remover formatação
+            const val = input.value.replace(/\D/g, '');
+            
+            // Validar tamanho
+            if (val.length !== 8) {
+                if (val.length > 0) {
+                    if (cepStatus) {
+                        cepStatus.textContent = 'CEP deve ter 8 dígitos';
+                        cepStatus.className = 'text-xs mt-1 text-red-500';
+                    }
+                    if (cepInput) {
+                        cepInput.style.borderBottomColor = '#ef4444';
+                    }
+                }
+                return;
+            }
+            
+            // Mostrar carregamento
+            if (cepStatus) {
+                cepStatus.textContent = 'Buscando CEP...';
+                cepStatus.className = 'text-xs mt-1 text-blue-500';
+            }
+            if (cepInput) {
+                cepInput.style.borderBottomColor = '#3b82f6';
+            }
+            
+            try {
+                // Tentar com CORS primeiro
+                const url = `https://viacep.com.br/ws/${val}/json/`;
+                console.log('Buscando CEP:', url);
+                
+                const res = await fetch(url, {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                
+                if (!res.ok) {
+                    throw new Error(`Erro HTTP: ${res.status}`);
+                }
+                
+                const d = await res.json();
+                console.log('Resposta ViaCEP:', d);
+                
+                if (d.erro) {
+                    throw new Error('CEP não encontrado');
+                }
+                
+                // Preencher campos
+                if (d.logradouro) {
+                    document.getElementById('dest-street').value = d.logradouro;
+                }
+                if (d.localidade && d.uf) {
+                    document.getElementById('dest-city').value = `${d.localidade}/${d.uf}`;
+                }
+                
+                // Feedback de sucesso
+                if (cepStatus) {
+                    cepStatus.textContent = '✓ CEP encontrado!';
+                    cepStatus.className = 'text-xs mt-1 text-green-500';
+                }
+                if (cepInput) {
+                    cepInput.style.borderBottomColor = '#10b981';
+                }
+                
+                // Focar no próximo campo
+                setTimeout(() => {
+                    const numberField = document.getElementById('dest-number');
+                    if (numberField) {
+                        numberField.focus();
+                    }
+                }, 300);
+                
+            } catch (error) {
+                console.error('Erro ao buscar CEP:', error);
+                
+                // Tentar método alternativo (JSONP)
+                try {
+                    await buscarCEPAlternativo(val);
+                } catch (altError) {
+                    console.error('Método alternativo também falhou:', altError);
+                    
+                    // Mostrar erro
+                    if (cepStatus) {
+                        cepStatus.textContent = 'Erro ao buscar CEP. Preencha manualmente.';
+                        cepStatus.className = 'text-xs mt-1 text-red-500';
+                    }
+                    if (cepInput) {
+                        cepInput.style.borderBottomColor = '#ef4444';
+                    }
+                }
+            }
+        }
+
+        // Método alternativo usando JSONP
+        function buscarCEPAlternativo(cep) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                const callbackName = 'viacep_callback_' + Date.now();
+                
+                window[callbackName] = (data) => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    
+                    if (data.erro) {
+                        reject(new Error('CEP não encontrado'));
+                        return;
+                    }
+                    
+                    // Preencher campos
+                    if (data.logradouro) {
+                        document.getElementById('dest-street').value = data.logradouro;
+                    }
+                    if (data.localidade && data.uf) {
+                        document.getElementById('dest-city').value = `${data.localidade}/${data.uf}`;
+                    }
+                    
+                    const cepStatus = document.getElementById('cep-status');
+                    if (cepStatus) {
+                        cepStatus.textContent = '✓ CEP encontrado!';
+                        cepStatus.className = 'text-xs mt-1 text-green-500';
+                    }
+                    
+                    resolve(data);
+                };
+                
+                script.src = `https://viacep.com.br/ws/${cep}/json/?callback=${callbackName}`;
+                script.onerror = () => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    reject(new Error('Erro ao carregar script'));
+                };
+                
+                document.body.appendChild(script);
+                
+                // Timeout de 5 segundos
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        reject(new Error('Timeout ao buscar CEP'));
+                    }
+                }, 5000);
+            });
+        }
+
+        function validateLogistics() {
+            if(!document.getElementById('dest-number').value || !document.getElementById('event-date').value) {
+                return alert("Por favor, informe o número do endereço e a data do evento.");
+            }
+            goToStep(3);
+        }
+
+        function validateClient() {
+            console.log('Validando cliente...');
+            const nome = document.getElementById('client-name').value.trim();
+            const doc = document.getElementById('client-id').value.trim();
+            
+            console.log('Nome:', nome, 'Doc:', doc);
+            
+            if(!nome || !doc) {
+                alert("Por favor, preencha o nome completo e o CPF/CNPJ do contratante.");
+                // Destacar campos vazios
+                if(!nome) {
+                    document.getElementById('client-name').style.borderBottomColor = '#ff0000';
+                    document.getElementById('client-name').focus();
+                }
+                if(!doc) {
+                    document.getElementById('client-id').style.borderBottomColor = '#ff0000';
+                    if(nome) document.getElementById('client-id').focus();
+                }
+                return false;
+            }
+            
+            // Remover destaque de erro
+            document.getElementById('client-name').style.borderBottomColor = '';
+            document.getElementById('client-id').style.borderBottomColor = '';
+            
+            // Avançar para próxima etapa
+            console.log('Dados válidos, avançando para etapa 4...');
+            const resultado = goToStep(4);
+            console.log('Resultado goToStep:', resultado);
+            return resultado;
+        }
+
+        function goToStep(s) {
+            console.log('goToStep chamado com:', s);
+            
+            if(s === 2 && selectedServices.length === 0) {
+                alert("Selecione ao menos um serviço.");
+                return false;
+            }
+            
+            try {
+                // Esconder todas as etapas
+                const todasEtapas = document.querySelectorAll('section[id^="step"]');
+                console.log('Etapas encontradas:', todasEtapas.length);
+                todasEtapas.forEach(sec => {
+                    sec.classList.add('step-inactive');
+                });
+                
+                // Mostrar etapa atual
+                const stepElement = document.getElementById(`step${s}`);
+                console.log('Elemento da etapa:', stepElement);
+                if(stepElement) {
+                    stepElement.classList.remove('step-inactive');
+                    console.log('Etapa', s, 'exibida');
+                } else {
+                    console.error('Etapa não encontrada: step' + s);
+                    alert('Erro: Etapa não encontrada. Recarregue a página.');
+                    return false;
+                }
+                
+                // Atualizar indicadores de progresso
+                for(let i=1; i<=4; i++) {
+                    const dot = document.getElementById(`dot-${i}`);
+                    if(dot) {
+                        dot.style.backgroundColor = (i <= s) ? "#c5a02e" : "#e5e7eb";
+                    }
+                }
+
+                // Ajustes específicos por etapa
+                if(s === 2) {
+                    setTimeout(() => {
+                        if(map) map.invalidateSize();
+                    }, 300);
+                }
+                
+                if(s === 4) {
+                    try {
+                        console.log('Gerando contrato...');
+                        generateContract();
+                        setTimeout(() => {
+                            fixSignatureCanvas();
+                        }, 100);
+                    } catch(error) {
+                        console.error('Erro ao gerar contrato:', error);
+                        // Continuar mesmo com erro na geração do contrato
+                    }
+                }
+                
+                // Scroll para o topo
+                setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 100);
+                
+                console.log('goToStep concluído com sucesso');
+                return true;
+            } catch(error) {
+                console.error('Erro ao mudar de etapa:', error);
+                console.error('Stack:', error.stack);
+                alert('Erro ao avançar. Por favor, tente novamente. Verifique o console para mais detalhes.');
+                return false;
+            }
+        }
+
+        function fixSignatureCanvas() {
+            setTimeout(() => {
+                const canvas = document.getElementById('signature-canvas');
+                const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                canvas.width = canvas.offsetWidth * ratio;
+                canvas.height = canvas.offsetHeight * ratio;
+                canvas.getContext("2d").scale(ratio, ratio);
+                signaturePad.clear();
+            }, 100);
+        }
+
+        function generateContract() {
+            try {
+                const nome = document.getElementById('client-name')?.value || '';
+                const doc = document.getElementById('client-id')?.value || '';
+                const eventDate = document.getElementById('event-date')?.value || '';
+                const data = eventDate ? eventDate.split('-').reverse().join('/') : 'Data não informada';
+                const street = document.getElementById('dest-street')?.value || '';
+                const number = document.getElementById('dest-number')?.value || '';
+                const city = document.getElementById('dest-city')?.value || '';
+                const end = `${street}, ${number} - ${city}`;
+                
+                let servs = selectedServices.map(s => {
+                    let h = "";
+                    if(s.includes("360")) {
+                        const hours360 = document.getElementById('hours-360');
+                        h = hours360 ? ` (${hours360.value}h)` : '';
+                    }
+                    if(s.includes("Som")) {
+                        const hoursSom = document.getElementById('hours-som');
+                        h = hoursSom ? ` (${hoursSom.value}h)` : '';
+                    }
+                    if(s.includes("DJ")) {
+                        const hoursDj = document.getElementById('hours-dj');
+                        h = hoursDj ? ` (${hoursDj.value}h)` : '';
+                    }
+                    return `<li>• ${s}${h}</li>`;
+                }).join('');
+
+                // Verificar se precisa de internet (Plataforma 360 ou DJ)
+                const precisaInternet = selectedServices.some(s => 
+                    s.includes("360") || s.includes("DJ")
+                );
+
+                // Montar cláusula de infraestrutura
+                let infraestrutura = "O contratante compromete-se a fornecer rede elétrica estável (220v)";
+                if (precisaInternet) {
+                    infraestrutura += " e conexão de internet estável";
+                }
+                infraestrutura += " e local protegido de intempéries.";
+
+                const contractView = document.getElementById('contract-view');
+                if(contractView) {
+                    contractView.innerHTML = `
+                        <h3 class="text-center font-bold underline mb-6">CONTRATO DE PRESTAÇÃO DE SERVIÇOS AUDIOVISUAIS</h3>
+                        <p><strong>CONTRATANTE:</strong> ${nome.toUpperCase()} | DOCUMENTO: ${doc}</p>
+                        <p><strong>CONTRATADA:</strong> MK AUDIOVISUAL, sediada em Francisco Morato/SP.</p>
+                        <p class="mt-4 font-bold">OBJETO DO CONTRATO:</p>
+                        <p>O presente instrumento tem como objeto a locação e operação técnica dos seguintes itens:</p>
+                        <ul class="my-4 font-semibold">${servs || '<li>Nenhum serviço selecionado</li>'}</ul>
+                        <p><strong>DATA E LOCAL:</strong> O evento será realizado em <strong>${data}</strong> no endereço <strong>${end}</strong>.</p>
+                        <p class="mt-6 font-bold uppercase text-red-700">CLÁUSULA DE CANCELAMENTO E SINAL:</p>
+                        <p class="italic border-l-4 border-black pl-4 my-2">
+                            "O valor pago a título de sinal (reserva de data) não será reembolsável em caso de cancelamento por parte do contratante, servindo para cobrir a reserva da agenda e custos administrativos da contratada."
+                        </p>
+                        <p class="mt-4">${infraestrutura}</p>
+                        <p class="text-right mt-12">Francisco Morato, ${new Date().toLocaleDateString('pt-BR')}</p>
+                    `;
+                } else {
+                    console.error('Elemento contract-view não encontrado');
+                }
+            } catch(error) {
+                console.error('Erro ao gerar contrato:', error);
+                const contractView = document.getElementById('contract-view');
+                if(contractView) {
+                    contractView.innerHTML = '<p class="text-red-500">Erro ao gerar contrato. Por favor, recarregue a página.</p>';
+                }
+            }
+        }
+
+        async function finalize() {
+            if(signaturePad.isEmpty()) return alert("Assinatura obrigatória.");
+
+            // Comprimir assinatura antes de criar o objeto
+            const assinaturaOriginal = signaturePad.toDataURL();
+            const assinaturaComprimida = await comprimirAssinaturaSync(assinaturaOriginal);
+            console.log('📦 Assinatura comprimida:', assinaturaOriginal.length, '->', assinaturaComprimida.length, 'caracteres');
+
+            const dataFinal = {
+                id_evento: Date.now(),
+                data_emissao: new Date().toLocaleString(),
+                cliente: {
+                    nome: document.getElementById('client-name').value,
+                    doc: document.getElementById('client-id').value,
+                    fone: document.getElementById('client-phone').value
+                },
+                logistica: {
+                    data: document.getElementById('event-date').value.split('-').reverse().join('/'),
+                    endereco: document.getElementById('dest-street').value + ", " + document.getElementById('dest-number').value,
+                    cidade: document.getElementById('dest-city').value
+                },
+                servicos: selectedServices.map(s => {
+                    let h = "";
+                    if(s.includes("360")) h = ` (${document.getElementById('hours-360').value}h)`;
+                    if(s.includes("Som")) h = ` (${document.getElementById('hours-som').value}h)`;
+                    if(s.includes("DJ")) h = ` (${document.getElementById('hours-dj').value}h)`;
+                    return s + h;
+                }),
+                assinatura: assinaturaComprimida
+            };
+
+            // Salvar no Google Drive com verificação
+            let salvamentoSucesso = false;
+            try {
+                console.log('💾 Tentando salvar contrato no Google Drive...');
+                
+                // Mostrar modal de carregamento
+                mostrarModalSalvamento('Salvando contrato no Google Drive...', 'loading');
+                
+                const resultado = await saveToDrive(dataFinal);
+                console.log('✅ Resposta do salvamento:', resultado);
+                
+                // Verificar se foi realmente salvo
+                console.log('🔍 Verificando confirmação do salvamento...');
+                atualizarModalSalvamento('Verificando se o arquivo foi salvo...', 'loading');
+                
+                const verificacao = await mkDriveAPI.verificarSalvamento(dataFinal.id_evento);
+                console.log('📊 Resultado da verificação:', verificacao);
+                
+                // Verificar se foi usado método alternativo (GET)
+                const metodoAlternativo = resultado.metodo === 'GET';
+                
+                if (metodoAlternativo) {
+                    // Método alternativo usado (GET) - não temos confirmação imediata
+                    salvamentoSucesso = true;
+                    atualizarModalSalvamento(
+                        `✅ CONTRATO ENVIADO!\n\n` +
+                        `📤 Método alternativo usado (compatível com CORS)\n\n` +
+                        `ℹ️ O contrato foi enviado para o Google Drive.\n` +
+                        `Verifique a pasta do Drive para confirmar.\n\n` +
+                        `📁 Pasta: Google Drive\n` +
+                        `📄 Arquivo: mk_audiovisual_contratos.json\n\n` +
+                        `💡 Dica: Use um servidor HTTP local para confirmação imediata.\n` +
+                        `Veja SOLUCAO_CORS.md para instruções.`,
+                        'warning'
+                    );
+                } else if (verificacao.sucesso && verificacao.encontrado) {
+                    // Método POST funcionou e contrato confirmado
+                    salvamentoSucesso = true;
+                    atualizarModalSalvamento(
+                        `✅ CONTRATO SALVO COM SUCESSO!\n\n` +
+                        `📊 Total de contratos no banco: ${verificacao.total}\n\n` +
+                        `✅ Arquivo JSON confirmado no Google Drive!\n\n` +
+                        `📁 Pasta: Google Drive\n` +
+                        `📄 Arquivo: mk_audiovisual_contratos.json\n\n` +
+                        `🆔 ID do Evento: ${dataFinal.id_evento}`,
+                        'success'
+                    );
+                } else if (verificacao.sucesso && !verificacao.encontrado) {
+                    // Salvou mas não encontrou na verificação (pode ser delay)
+                    salvamentoSucesso = true;
+                    atualizarModalSalvamento(
+                        `⚠️ CONTRATO ENVIADO!\n\n` +
+                        `📊 Total de contratos: ${verificacao.total || resultado.total || 'N/A'}\n\n` +
+                        `ℹ️ ${verificacao.mensagem || 'O arquivo pode estar sendo processado.'}\n\n` +
+                        `✅ Resposta do servidor: ${resultado.message || 'Enviado com sucesso'}`,
+                        'warning'
+                    );
+                } else {
+                    throw new Error(verificacao.erro || verificacao.mensagem || 'Erro na verificação');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao salvar no Google Drive:', error);
+                console.error('📝 Detalhes completos:', error.message, error.stack);
+                
+                // Verificar se é erro de CORS
+                const isCORSError = error.message.includes('CORS') || 
+                                   error.message.includes('Failed to fetch') ||
+                                   error.message.includes('blocked');
+                
+                let mensagemErro = `❌ ERRO AO SALVAR NO GOOGLE DRIVE!\n\n`;
+                mensagemErro += `📝 Erro: ${error.message}\n\n`;
+                
+                if (isCORSError) {
+                    mensagemErro += `🔒 Erro de CORS detectado!\n\n`;
+                    mensagemErro += `💡 Soluções:\n`;
+                    mensagemErro += `1. Use um servidor HTTP local\n`;
+                    mensagemErro += `   (Veja SOLUCAO_CORS.md)\n\n`;
+                    mensagemErro += `2. O método alternativo foi tentado\n`;
+                    mensagemErro += `   Verifique o Google Drive manualmente\n\n`;
+                } else {
+                    mensagemErro += `⚠️ O PDF foi gerado, mas o arquivo JSON não foi salvo.\n\n`;
+                    mensagemErro += `💡 Verifique:\n`;
+                    mensagemErro += `• Conexão com internet\n`;
+                    mensagemErro += `• Google Apps Script configurado\n`;
+                    mensagemErro += `• Console do navegador (F12) para mais detalhes`;
+                }
+                
+                // Mostrar erro no modal
+                atualizarModalSalvamento(mensagemErro, 'error');
+                
+                // Continuar mesmo se falhar o upload - o PDF já foi gerado
+            }
+            
+            // Aguardar antes de continuar (dar tempo para o usuário ver a mensagem)
+            await new Promise(resolve => setTimeout(resolve, salvamentoSucesso ? 3000 : 5000));
+            
+            // Fechar modal
+            fecharModalSalvamento();
+
+            // GERAR PDF COM TUDO
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            
+            // Cabeçalho
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(16);
+            pdf.text("MK AUDIOVISUAL - CONTRATO DIGITAL", 105, 20, { align: 'center' });
+            
+            pdf.setFontSize(10);
+            pdf.text("__________________________________________________________________", 20, 25);
+
+            // Dados das Partes
+            pdf.setFont("helvetica", "bold");
+            pdf.text("CONTRATANTE:", 20, 35);
+            pdf.setFont("helvetica", "normal");
+            pdf.text(`${dataFinal.cliente.nome.toUpperCase()} | DOC: ${dataFinal.cliente.doc}`, 55, 35);
+
+            pdf.setFont("helvetica", "bold");
+            pdf.text("CONTRATADA:", 20, 42);
+            pdf.setFont("helvetica", "normal");
+            pdf.text("MK AUDIOVISUAL - Francisco Morato/SP", 55, 42);
+
+            // Objeto e Serviços
+            pdf.setFont("helvetica", "bold");
+            pdf.text("OBJETO E SERVIÇOS SELECIONADOS:", 20, 55);
+            pdf.setFont("helvetica", "normal");
+            let yPos = 62;
+            dataFinal.servicos.forEach(serv => {
+                pdf.text(`- ${serv}`, 25, yPos);
+                yPos += 7;
+            });
+
+            // Logística
+            yPos += 5;
+            pdf.setFont("helvetica", "bold");
+            pdf.text("DATA E LOCAL DO EVENTO:", 20, yPos);
+            pdf.setFont("helvetica", "normal");
+            yPos += 7;
+            pdf.text(`Data: ${dataFinal.logistica.data}`, 25, yPos);
+            yPos += 7;
+            pdf.text(`Local: ${dataFinal.logistica.endereco} - ${dataFinal.logistica.cidade}`, 25, yPos);
+
+            // Cláusulas
+            yPos += 12;
+            pdf.setFont("helvetica", "bold");
+            pdf.text("CLÁUSULA DE CANCELAMENTO E SINAL:", 20, yPos);
+            yPos += 7;
+            pdf.setFont("helvetica", "italic");
+            const clausula = "O valor pago a título de sinal (reserva de data) não será reembolsável em caso de cancelamento por parte do contratante, servindo para cobrir a reserva da agenda e custos administrativos da contratada.";
+            const lines = pdf.splitTextToSize(clausula, 170);
+            pdf.text(lines, 20, yPos);
+            
+            yPos += (lines.length * 5) + 5;
+            pdf.setFont("helvetica", "normal");
+            
+            // Verificar se precisa de internet (Plataforma 360 ou DJ)
+            const precisaInternetPDF = dataFinal.servicos.some(serv => 
+                serv.includes("360") || serv.includes("DJ")
+            );
+            
+            let infraestruturaPDF = "O contratante compromete-se a fornecer rede elétrica estável (220v)";
+            if (precisaInternetPDF) {
+                infraestruturaPDF += " e conexão de internet estável";
+            }
+            infraestruturaPDF += " e local protegido de intempéries.";
+            
+            pdf.text(infraestruturaPDF, 20, yPos);
+
+            // Assinatura e Rodapé
+            yPos += 20;
+            pdf.text(`Francisco Morato, ${new Date().toLocaleDateString('pt-BR')}`, 105, yPos, { align: 'center' });
+            
+            yPos += 15;
+            pdf.addImage(dataFinal.assinatura, 'PNG', 20, yPos, 50, 15);
+            pdf.text("__________________________", 20, yPos + 18);
+            pdf.setFontSize(8);
+            pdf.text("Assinatura do Cliente", 20, yPos + 22);
+
+            pdf.setFontSize(10);
+            pdf.text("__________________________", 130, yPos + 18);
+            pdf.text("MK Audiovisual", 130, yPos + 22);
+
+            pdf.save(`Contrato_Completo_MK_${dataFinal.cliente.nome.replace(/\s+/g, '_')}.pdf`);
+
+            // Mostrar Intro Final
+            document.getElementById('final-intro').style.display = 'flex';
+        }
+
+        // Funções para Google Drive (via Apps Script)
+        async function saveToDrive(data) {
+            try {
+                console.log('🚀 Iniciando saveToDrive...');
+                console.log('📊 Dados recebidos:', data);
+                
+                // Usar API unificada
+                const result = await mkDriveAPI.salvarContrato(data);
+                console.log('✅ Resultado do salvamento:', result);
+                return result;
+            } catch (error) {
+                console.error('❌ Erro em saveToDrive:', error);
+                console.error('📝 Tipo do erro:', error.constructor.name);
+                console.error('📝 Mensagem:', error.message);
+                console.error('📝 Stack:', error.stack);
+                throw error;
+            }
+        }
+
+        // Função para "conectar" Google Drive (já está configurado via Apps Script)
+        function handleDriveLogin() {
+            alert('✅ Google Drive já está configurado!\n\nO sistema usa Google Apps Script para salvar automaticamente.\n\nClique em "🧪 Testar Conexão" para verificar se está funcionando.');
+        }
+
+        // Função de teste para verificar conexão
+        async function testarConexao() {
+            try {
+                console.log('🧪 Testando conexão com Google Apps Script...');
+                
+                const resultado = await mkDriveAPI.lerContratos();
+                
+                if (resultado.success) {
+                    console.log('✅ Conexão OK!', resultado);
+                    alert(`✅ Conexão OK!\n\nO Google Apps Script está respondendo corretamente.\n\nTotal de contratos: ${resultado.total}\nÚltima atualização: ${resultado.ultima_atualizacao || 'Nunca'}`);
+                } else {
+                    throw new Error(resultado.error || 'Erro desconhecido');
+                }
+            } catch (error) {
+                console.error('❌ Erro no teste:', error);
+                alert('❌ Erro ao testar conexão:\n\n' + error.message);
+            }
+        }
+
+        async function showDriveStats() {
+            // Criar modal de carregamento
+            const modal = document.createElement('div');
+            modal.id = 'stats-modal';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
+            modal.innerHTML = `
+                <div class="glass-card p-8 max-w-4xl mx-auto">
+                    <h2 class="luxury-text text-3xl mb-6 text-center">Contratos no Google Drive</h2>
+                    <div class="text-center py-8">
+                        <p class="text-gray-600">Carregando dados...</p>
+                    </div>
+                </div>
+            `;
+            modal.onclick = function(e) {
+                if (e.target === modal) closeStatsModal();
+            };
+            document.body.appendChild(modal);
+            
+            try {
+                console.log('Iniciando leitura de dados...');
+                const dados = await mkDriveAPI.lerContratos();
+                const stats = {
+                    total: dados.total || 0,
+                    ultima_atualizacao: dados.ultima_atualizacao || 'Nunca',
+                    contratos: dados.contratos || []
+                };
+                console.log('Dados recebidos:', stats);
+                
+                // Armazenar dados globalmente para exportação
+                dadosAtuais = stats;
+                
+                let html = `
+                    <div class="glass-card p-8 max-w-4xl mx-auto">
+                        <h2 class="luxury-text text-3xl mb-6 text-center">Contratos Salvos no Google Drive</h2>
+                        <div class="mb-6 p-4 bg-gray-50 rounded border border-[#c5a02e]">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Total de Contratos</p>
+                                    <p class="text-2xl font-bold text-[#c5a02e]">${stats.total}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-1">Última Atualização</p>
+                                    <p class="text-sm font-semibold">${stats.ultima_atualizacao && stats.ultima_atualizacao !== 'Nunca' ? new Date(stats.ultima_atualizacao).toLocaleString('pt-BR') : 'Nunca'}</p>
+                                </div>
+                            </div>
+                            <div class="mt-4 pt-4 border-t">
+                                <a href="https://drive.google.com/drive/folders/16kt50n_MFB60_h3JFgIA408k8YrjU6Rb?usp=sharing" target="_blank" class="text-xs text-[#c5a02e] hover:underline">
+                                    📁 Abrir pasta no Google Drive
+                                </a>
+                            </div>
+                        </div>
+                        <div class="mb-4 flex gap-2 justify-end">
+                            <button onclick="exportarJSON()" class="px-4 py-2 bg-gray-700 text-white text-xs font-bold uppercase hover:bg-gray-600 transition-colors">
+                                📥 Exportar JSON
+                            </button>
+                            <button onclick="atualizarDados()" class="px-4 py-2 bg-[#c5a02e] text-black text-xs font-bold uppercase hover:bg-[#b8941f] transition-colors">
+                                🔄 Atualizar
+                            </button>
+                        </div>
+                        <div class="max-h-96 overflow-y-auto border rounded p-4 bg-gray-50">
+                `;
+                
+                if (stats.contratos && stats.contratos.length > 0) {
+                    stats.contratos.forEach((contrato, index) => {
+                        const numero = stats.contratos.length - index; // Mostrar do mais recente para o mais antigo
+                        html += `
+                            <div class="border-b border-gray-300 p-4 mb-4 bg-white rounded shadow-sm hover:shadow-md transition-shadow">
+                                <div class="flex justify-between items-start mb-2">
+                                    <p class="font-bold text-lg text-[#c5a02e]">Contrato #${numero}</p>
+                                    <span class="text-xs text-gray-400">ID: ${contrato.id_evento || 'N/A'}</span>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                        <p class="text-xs text-gray-500 uppercase mb-1">Cliente</p>
+                                        <p class="font-semibold">${contrato.cliente?.nome || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-gray-500 uppercase mb-1">Documento</p>
+                                        <p>${contrato.cliente?.doc || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-gray-500 uppercase mb-1">Telefone</p>
+                                        <p>${contrato.cliente?.fone || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-gray-500 uppercase mb-1">Data do Evento</p>
+                                        <p class="font-semibold">${contrato.logistica?.data || 'N/A'}</p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <p class="text-xs text-gray-500 uppercase mb-1">Endereço</p>
+                                        <p>${contrato.logistica?.endereco || 'N/A'} - ${contrato.logistica?.cidade || 'N/A'}</p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <p class="text-xs text-gray-500 uppercase mb-1">Serviços</p>
+                                        <p class="font-semibold text-[#c5a02e]">${contrato.servicos ? contrato.servicos.join(' • ') : 'N/A'}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-3 pt-3 border-t border-gray-200">
+                                    <p class="text-xs text-gray-400">Emitido em: ${contrato.data_emissao || 'N/A'}</p>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += `
+                        <div class="text-center py-12">
+                            <p class="text-gray-500 text-lg mb-4">📭 Nenhum contrato encontrado no banco de dados</p>
+                            <p class="text-xs text-gray-400">Os contratos salvos aparecerão aqui automaticamente</p>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                        </div>
+                        <div class="mt-6 text-center">
+                            <button onclick="closeStatsModal()" class="px-6 py-2 bg-black text-[#c5a02e] font-bold uppercase hover:bg-gray-900 transition-colors">Fechar</button>
+                        </div>
+                    </div>
+                `;
+                
+                // Atualizar modal com os dados
+                modal.innerHTML = html;
+            } catch (error) {
+                console.error('Erro completo:', error);
+                modal.innerHTML = `
+                    <div class="glass-card p-8 max-w-4xl mx-auto">
+                        <h2 class="luxury-text text-3xl mb-6 text-center text-red-600">Erro ao Carregar Dados</h2>
+                        <div class="mb-6 p-4 bg-red-50 rounded border border-red-200">
+                            <p class="text-sm text-red-800"><strong>Erro:</strong> ${error.message || error.toString()}</p>
+                            <p class="text-xs text-red-600 mt-2">Verifique o console do navegador (F12) para mais detalhes.</p>
+                        </div>
+                        <div class="text-center">
+                            <button onclick="showDriveStats()" class="px-6 py-2 bg-[#c5a02e] text-black font-bold uppercase hover:bg-[#b8941f] transition-colors mr-2">Tentar Novamente</button>
+                            <button onclick="closeStatsModal()" class="px-6 py-2 bg-gray-600 text-white font-bold uppercase hover:bg-gray-700 transition-colors">Fechar</button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function closeStatsModal() {
+            const modal = document.getElementById('stats-modal');
+            if (modal) modal.remove();
+        }
+
+        // Variável global para armazenar dados atuais
+        let dadosAtuais = null;
+
+        async function atualizarDados() {
+            const modal = document.getElementById('stats-modal');
+            if (modal) {
+                modal.querySelector('.glass-card').innerHTML = `
+                    <div class="text-center py-8">
+                        <p class="text-gray-600">Atualizando dados...</p>
+                    </div>
+                `;
+            }
+            await showDriveStats();
+        }
+
+        async function exportarJSON() {
+            try {
+                const resultado = await mkDriveAPI.lerContratos();
+                const data = resultado.success ? { contratos: resultado.contratos, ultima_atualizacao: resultado.ultima_atualizacao } : { contratos: [] };
+                const jsonString = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `mk_audiovisual_contratos_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                alert('JSON exportado com sucesso!');
+            } catch (error) {
+                alert('Erro ao exportar JSON: ' + error.message);
+            }
+        }
+
+        // Função para comprimir assinatura (reduz tamanho)
+        function comprimirAssinaturaSync(dataURL) {
+            // Se já for pequeno, retornar como está
+            if (dataURL.length < 5000) {
+                return dataURL;
+            }
+            
+            try {
+                // Criar canvas temporário
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                // Reduzir tamanho
+                canvas.width = 400;
+                canvas.height = 150;
+                
+                // Usar Promise para aguardar carregamento da imagem
+                return new Promise((resolve) => {
+                    img.onload = function() {
+                        ctx.drawImage(img, 0, 0, 400, 150);
+                        // Retornar versão comprimida (JPEG com qualidade 0.6)
+                        const compressed = canvas.toDataURL('image/jpeg', 0.6);
+                        console.log('📦 Assinatura comprimida:', dataURL.length, '->', compressed.length, 'caracteres');
+                        resolve(compressed);
+                    };
+                    img.onerror = function() {
+                        // Se falhar, retornar original
+                        resolve(dataURL);
+                    };
+                    img.src = dataURL;
+                });
+            } catch (e) {
+                // Se falhar, retornar original
+                return Promise.resolve(dataURL);
+            }
+        }
+
+        // Funções para Modal de Salvamento
+        function mostrarModalSalvamento(mensagem, tipo = 'loading') {
+            // Remover modal existente se houver
+            const modalExistente = document.getElementById('modal-salvamento');
+            if (modalExistente) {
+                modalExistente.remove();
+            }
+
+            const modal = document.createElement('div');
+            modal.id = 'modal-salvamento';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[10000] p-4';
+            modal.innerHTML = `
+                <div class="glass-card p-8 max-w-md mx-auto text-center">
+                    <div id="modal-salvamento-icon" class="mb-4">
+                        ${tipo === 'loading' ? '<div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#c5a02e] border-t-transparent"></div>' : ''}
+                        ${tipo === 'success' ? '<div class="inline-block w-12 h-12 bg-green-500 rounded-full flex items-center justify-center"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>' : ''}
+                        ${tipo === 'error' ? '<div class="inline-block w-12 h-12 bg-red-500 rounded-full flex items-center justify-center"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></div>' : ''}
+                        ${tipo === 'warning' ? '<div class="inline-block w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>' : ''}
+                    </div>
+                    <h3 class="luxury-text text-2xl mb-4 ${tipo === 'success' ? 'text-green-600' : tipo === 'error' ? 'text-red-600' : tipo === 'warning' ? 'text-yellow-600' : 'text-[#c5a02e]'}">
+                        ${tipo === 'loading' ? 'Salvando...' : tipo === 'success' ? 'Sucesso!' : tipo === 'error' ? 'Erro!' : 'Atenção!'}
+                    </h3>
+                    <div id="modal-salvamento-mensagem" class="text-sm text-gray-700 whitespace-pre-line">
+                        ${mensagem}
+                    </div>
+                    ${tipo !== 'loading' ? '<button onclick="fecharModalSalvamento()" class="mt-6 px-6 py-2 bg-black text-[#c5a02e] font-bold uppercase hover:bg-gray-900 transition-colors">Fechar</button>' : ''}
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function atualizarModalSalvamento(mensagem, tipo = 'loading') {
+            const modal = document.getElementById('modal-salvamento');
+            if (!modal) {
+                mostrarModalSalvamento(mensagem, tipo);
+                return;
+            }
+
+            const iconDiv = document.getElementById('modal-salvamento-icon');
+            const mensagemDiv = document.getElementById('modal-salvamento-mensagem');
+            const titulo = modal.querySelector('h3');
+
+            // Atualizar ícone
+            iconDiv.innerHTML = `
+                ${tipo === 'loading' ? '<div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#c5a02e] border-t-transparent"></div>' : ''}
+                ${tipo === 'success' ? '<div class="inline-block w-12 h-12 bg-green-500 rounded-full flex items-center justify-center"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>' : ''}
+                ${tipo === 'error' ? '<div class="inline-block w-12 h-12 bg-red-500 rounded-full flex items-center justify-center"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></div>' : ''}
+                ${tipo === 'warning' ? '<div class="inline-block w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>' : ''}
+            `;
+
+            // Atualizar título
+            if (titulo) {
+                titulo.textContent = tipo === 'loading' ? 'Salvando...' : tipo === 'success' ? 'Sucesso!' : tipo === 'error' ? 'Erro!' : 'Atenção!';
+                titulo.className = `luxury-text text-2xl mb-4 ${tipo === 'success' ? 'text-green-600' : tipo === 'error' ? 'text-red-600' : tipo === 'warning' ? 'text-yellow-600' : 'text-[#c5a02e]'}`;
+            }
+
+            // Atualizar mensagem
+            if (mensagemDiv) {
+                mensagemDiv.textContent = mensagem;
+            }
+
+            // Adicionar botão de fechar se não for loading
+            if (tipo !== 'loading' && !modal.querySelector('button')) {
+                const buttonDiv = document.createElement('div');
+                buttonDiv.className = 'mt-6';
+                buttonDiv.innerHTML = '<button onclick="fecharModalSalvamento()" class="px-6 py-2 bg-black text-[#c5a02e] font-bold uppercase hover:bg-gray-900 transition-colors">Fechar</button>';
+                modal.querySelector('.glass-card').appendChild(buttonDiv);
+            }
+        }
+
+        function fecharModalSalvamento() {
+            const modal = document.getElementById('modal-salvamento');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // Sistema já está pronto - Google Apps Script não precisa inicialização
+        window.addEventListener('load', () => {
+            console.log('Sistema MK Audiovisual carregado. Google Apps Script configurado.');
+        });
+    </script>
+
+    <!-- RODAPÉ COM REDES SOCIAIS -->
+    <footer class="bg-black text-white py-12 mt-20 border-t-4 border-[#c5a02e]">
+        <div class="container mx-auto px-4 max-w-5xl">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
+                <!-- Informações -->
+                <div>
+                    <h3 class="luxury-text text-2xl text-[#c5a02e] mb-4">MK Audiovisual</h3>
+                    <p class="text-xs text-gray-400 mb-2">Luxury Events</p>
+                    <p class="text-xs text-gray-400">Francisco Morato, SP</p>
+                </div>
+                
+                <!-- Contato -->
+                <div>
+                    <h4 class="text-sm font-bold uppercase tracking-widest mb-4 text-[#c5a02e]">Contato</h4>
+                    <a href="tel:+5511999999999" class="text-xs text-gray-400 hover:text-[#c5a02e] block mb-2 transition-colors">
+                        (11) 99999-9999
+                    </a>
+                    <a href="mailto:contato@mkaudiovisual.com.br" class="text-xs text-gray-400 hover:text-[#c5a02e] block transition-colors">
+                        contato@mkaudiovisual.com.br
+                    </a>
+                </div>
+                
+                <!-- Redes Sociais -->
+                <div>
+                    <h4 class="text-sm font-bold uppercase tracking-widest mb-4 text-[#c5a02e]">Redes Sociais</h4>
+                    <div class="flex justify-center md:justify-start gap-3">
+                        <a href="https://www.instagram.com/mkaudiovisual" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="Instagram">
+                            <svg fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                            </svg>
+                        </a>
+                        <a href="https://www.facebook.com/mkaudiovisual" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="Facebook">
+                            <svg fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                        </a>
+                        <a href="https://wa.me/5511999999999" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="WhatsApp">
+                            <svg fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                            </svg>
+                        </a>
+                        <a href="https://www.youtube.com/@mkaudiovisual" target="_blank" class="social-icon bg-[#c5a02e] text-black hover:bg-[#b8941f]" title="YouTube">
+                            <svg fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-800 mt-8 pt-8 text-center">
+                <p class="text-xs text-gray-500 uppercase tracking-widest">
+                    © 2024 MK Audiovisual. Todos os direitos reservados.
+                </p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
