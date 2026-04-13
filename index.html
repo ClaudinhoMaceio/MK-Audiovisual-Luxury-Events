@@ -33,6 +33,22 @@
         /* Assinatura */
         .signature-wrapper { border: 2px solid #000; background: #fff; height: 200px; position: relative; width: 100%; }
         .signature-pad { position: absolute; left: 0; top: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+        .signature-fixed {
+            width: 230px;
+            height: 70px;
+            border: 2px solid #000;
+            background: #fff;
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+        }
+        .signature-fixed img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
         
         .step-inactive { display: none; }
         #map { height: 250px; width: 100%; border: 1px solid #000; border-radius: 4px; z-index: 1; }
@@ -270,8 +286,12 @@
                         <button onclick="signaturePad.clear()" class="w-full text-[10px] text-red-500 font-bold uppercase tracking-widest">Limpar Assinatura</button>
                     </div>
                     <div class="text-center pb-10">
+                        <p class="text-center text-[10px] font-bold uppercase tracking-widest text-[#c5a02e] mb-3">Assinatura da Contratada</p>
+                        <div class="signature-fixed">
+                            <img id="assinatura-contratada-preview" alt="Assinatura de Mikael Lucas">
+                        </div>
                         <div class="w-48 h-[1px] bg-black mx-auto mb-2"></div>
-                        <p class="text-[10px] font-bold uppercase">MK Audiovisual</p>
+                        <p class="text-[10px] font-bold uppercase">Mikael Lucas Soares da Silva</p>
                         <p class="text-[9px] text-gray-400 uppercase italic">Contratada Responsável</p>
                     </div>
                 </div>
@@ -284,9 +304,12 @@
 
     <script>
         const mkCoords = { lat: -23.2847, lng: -46.7458 };
+        const NOME_CONTRATADA = 'Mikael Lucas Soares da Silva';
+        const ASSINATURA_ARTISTICA = 'Mikael Lucas';
         let map, signaturePad;
         let selectedServices = [];
         let deferredInstallPrompt = null;
+        let assinaturaContratadaDataURL = '';
 
         window.onload = () => {
             // Inicializar Mapa
@@ -297,7 +320,42 @@
             // Inicializar Assinatura
             const canvas = document.getElementById('signature-canvas');
             signaturePad = new SignaturePad(canvas, { backgroundColor: 'white' });
+
+            // Gerar assinatura fixa da contratada
+            assinaturaContratadaDataURL = gerarAssinaturaContratada();
+            const assinaturaPreview = document.getElementById('assinatura-contratada-preview');
+            if (assinaturaPreview && assinaturaContratadaDataURL) {
+                assinaturaPreview.src = assinaturaContratadaDataURL;
+            }
         };
+
+        function gerarAssinaturaContratada() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 600;
+            canvas.height = 180;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return '';
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(40, 132);
+            ctx.lineTo(560, 132);
+            ctx.stroke();
+
+            ctx.fillStyle = '#111111';
+            ctx.font = 'italic 62px "Brush Script MT", "Segoe Script", cursive';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(ASSINATURA_ARTISTICA, 80, 88);
+
+            ctx.font = '600 20px Arial, sans-serif';
+            ctx.fillText(NOME_CONTRATADA, 80, 155);
+
+            return canvas.toDataURL('image/png');
+        }
 
         function toggleService(id, name) {
             const cb = document.getElementById(`check-${id}`);
@@ -886,33 +944,55 @@
             pdf.setFont("helvetica", "bold");
             pdf.text("CONTRATANTE:", 20, 35);
             pdf.setFont("helvetica", "normal");
-            pdf.text(`${dataFinal.cliente.nome.toUpperCase()} | DOC: ${dataFinal.cliente.doc}`, 55, 35);
+            const textoContratante = `${dataFinal.cliente.nome || ''} | DOC: ${dataFinal.cliente.doc || ''}`;
+            const linhasContratante = pdf.splitTextToSize(textoContratante, 130);
+            pdf.text(linhasContratante, 55, 35);
 
+            const yContratada = 35 + (linhasContratante.length * 5) + 2;
             pdf.setFont("helvetica", "bold");
-            pdf.text("CONTRATADA:", 20, 42);
+            pdf.text("CONTRATADA:", 20, yContratada);
             pdf.setFont("helvetica", "normal");
-            pdf.text("MK AUDIOVISUAL - Francisco Morato/SP", 55, 42);
+            const linhasContratada = pdf.splitTextToSize(`MK AUDIOVISUAL - ${NOME_CONTRATADA}`, 130);
+            pdf.text(linhasContratada, 55, yContratada);
 
             // Objeto e Serviços
+            let yPos = yContratada + (linhasContratada.length * 5) + 8;
+            const topMargin = 20;
+            const pageBottom = 275;
+            const lineHeight = 5;
+            const ensureSpace = (requiredHeight = 10) => {
+                if (yPos + requiredHeight > pageBottom) {
+                    pdf.addPage();
+                    yPos = topMargin;
+                    pdf.setFontSize(10);
+                }
+            };
+
+            ensureSpace(15);
             pdf.setFont("helvetica", "bold");
-            pdf.text("OBJETO E SERVIÇOS SELECIONADOS:", 20, 55);
+            pdf.text("OBJETO E SERVIÇOS SELECIONADOS:", 20, yPos);
             pdf.setFont("helvetica", "normal");
-            let yPos = 62;
+            yPos += 7;
             dataFinal.servicos.forEach(serv => {
-                pdf.text(`- ${serv}`, 25, yPos);
-                yPos += 7;
+                const servicoLinhas = pdf.splitTextToSize(`- ${serv}`, 165);
+                ensureSpace(servicoLinhas.length * lineHeight + 3);
+                pdf.text(servicoLinhas, 25, yPos);
+                yPos += (servicoLinhas.length * lineHeight) + 2;
             });
 
             // Logística
             yPos += 5;
+            ensureSpace(25);
             pdf.setFont("helvetica", "bold");
             pdf.text("DATA E LOCAL DO EVENTO:", 20, yPos);
             pdf.setFont("helvetica", "normal");
             yPos += 7;
             pdf.text(`Data: ${dataFinal.logistica.data}`, 25, yPos);
             yPos += 7;
-            pdf.text(`Local: ${dataFinal.logistica.endereco} - ${dataFinal.logistica.cidade}`, 25, yPos);
-            yPos += 7;
+            const localEventoLinhas = pdf.splitTextToSize(`Local: ${dataFinal.logistica.endereco} - ${dataFinal.logistica.cidade}`, 165);
+            ensureSpace(localEventoLinhas.length * lineHeight + 3);
+            pdf.text(localEventoLinhas, 25, yPos);
+            yPos += (localEventoLinhas.length * lineHeight) + 2;
             pdf.setFont("helvetica", "bold");
             pdf.text("VALOR DO EVENTO:", 20, yPos);
             pdf.setFont("helvetica", "normal");
@@ -921,13 +1001,15 @@
 
             // Cláusulas
             yPos += 12;
+            ensureSpace(20);
             pdf.setFont("helvetica", "bold");
             pdf.text("CLÁUSULA DE CANCELAMENTO E SINAL:", 20, yPos);
             yPos += 7;
             pdf.setFont("helvetica", "italic");
             const clausula = "O valor pago a título de sinal (reserva de data) não será reembolsável em caso de cancelamento por parte do contratante, servindo para cobrir a reserva da agenda e custos administrativos da contratada.";
             const lines = pdf.splitTextToSize(clausula, 170);
-            pdf.text(lines, 20, yPos);
+            ensureSpace((lines.length * lineHeight) + 5);
+            pdf.text(lines, 105, yPos, { align: 'center' });
             
             yPos += (lines.length * 5) + 5;
             pdf.setFont("helvetica", "normal");
@@ -943,10 +1025,14 @@
             }
             infraestruturaPDF += " e local protegido de intempéries.";
             
-            pdf.text(infraestruturaPDF, 20, yPos);
+            const infraestruturaLinhas = pdf.splitTextToSize(infraestruturaPDF, 170);
+            ensureSpace((infraestruturaLinhas.length * lineHeight) + 8);
+            pdf.text(infraestruturaLinhas, 105, yPos, { align: 'center' });
+            yPos += (infraestruturaLinhas.length * lineHeight);
 
             // Assinatura e Rodapé
             yPos += 20;
+            ensureSpace(50);
             pdf.text(`Francisco Morato, ${new Date().toLocaleDateString('pt-BR')}`, 105, yPos, { align: 'center' });
             
             yPos += 15;
@@ -956,8 +1042,12 @@
             pdf.text("Assinatura do Cliente", 20, yPos + 22);
 
             pdf.setFontSize(10);
+            if (assinaturaContratadaDataURL) {
+                pdf.addImage(assinaturaContratadaDataURL, 'PNG', 130, yPos - 4, 65, 18);
+            }
             pdf.text("__________________________", 130, yPos + 18);
-            pdf.text("MK Audiovisual", 130, yPos + 22);
+            const nomeContratadaLinhas = pdf.splitTextToSize(NOME_CONTRATADA, 70);
+            pdf.text(nomeContratadaLinhas, 162.5, yPos + 22, { align: 'center' });
 
             pdf.save(`Contrato_Completo_MK_${dataFinal.cliente.nome.replace(/\s+/g, '_')}.pdf`);
 
