@@ -254,6 +254,7 @@ function saveFullData(folderId, fileName, fullData) {
 function saveData(folderId, fileName, newData) {
   try {
     console.log('Salvando dados. Pasta:', folderId, 'Arquivo:', fileName);
+    newData = normalizeContractData(newData);
     console.log('Novo contrato ID:', newData.id_evento);
     
     // Obter pasta
@@ -345,6 +346,46 @@ function saveData(folderId, fileName, newData) {
 // ============================================
 // FUNÇÕES AUXILIARES
 // ============================================
+
+function normalizeContractData(contrato) {
+  const safeContrato = contrato || {};
+  const safeLogistica = safeContrato.logistica || {};
+
+  const valorRaw = safeLogistica.valor_evento || safeContrato.valor_evento || '';
+  const valorNumeroRaw = safeLogistica.valor_evento_numero;
+  const valorNumero = parseValorParaNumero(valorNumeroRaw || valorRaw);
+  const valorFormatado = valorNumero > 0 ? formatBRL(valorNumero) : (valorRaw || '');
+
+  safeContrato.logistica = {
+    ...safeLogistica,
+    valor_evento: valorFormatado,
+    valor_evento_numero: valorNumero
+  };
+
+  return safeContrato;
+}
+
+function parseValorParaNumero(valor) {
+  if (valor === null || valor === undefined) return 0;
+  if (typeof valor === 'number') {
+    return isFinite(valor) ? valor : 0;
+  }
+
+  const normalized = String(valor)
+    .replace(/\s/g, '')
+    .replace('R$', '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .trim();
+
+  const number = parseFloat(normalized);
+  return isFinite(number) ? number : 0;
+}
+
+function formatBRL(valorNumero) {
+  if (!valorNumero || !isFinite(valorNumero)) return '';
+  return 'R$ ' + valorNumero.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
 
 // Criar resposta de sucesso
 function createSuccessResponse(data, total, callback) {

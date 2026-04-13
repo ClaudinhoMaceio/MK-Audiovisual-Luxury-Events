@@ -17,7 +17,12 @@
 const MK_DRIVE_CONFIG = {
     SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwlXdKn8UPygZLwqkimfA6YydFyD9EZmw51uYCNnmG0rX94B0dP6ONDATWWr9C7k8vT/exec',
     FOLDER_ID: '16kt50n_MFB60_h3JFgIA408k8YrjU6Rb',
-    FILE_NAME: 'mk_audiovisual_contratos.json'
+    FILE_NAME: 'mk_audiovisual_contratos.json',
+    REQUEST_TIMEOUT_MS: 15000,
+    VERIFY_RETRIES: 4,
+    VERIFY_INTERVAL_MS: 1500,
+    MOBILE_VERIFY_RETRIES: 8,
+    MOBILE_VERIFY_INTERVAL_MS: 2500
 };
 
 // ============================================
@@ -28,6 +33,11 @@ class MKDriveAPI {
         this.SCRIPT_URL = config.SCRIPT_URL || MK_DRIVE_CONFIG.SCRIPT_URL;
         this.FOLDER_ID = config.FOLDER_ID || MK_DRIVE_CONFIG.FOLDER_ID;
         this.FILE_NAME = config.FILE_NAME || MK_DRIVE_CONFIG.FILE_NAME;
+        this.REQUEST_TIMEOUT_MS = config.REQUEST_TIMEOUT_MS || MK_DRIVE_CONFIG.REQUEST_TIMEOUT_MS;
+        this.VERIFY_RETRIES = config.VERIFY_RETRIES || MK_DRIVE_CONFIG.VERIFY_RETRIES;
+        this.VERIFY_INTERVAL_MS = config.VERIFY_INTERVAL_MS || MK_DRIVE_CONFIG.VERIFY_INTERVAL_MS;
+        this.MOBILE_VERIFY_RETRIES = config.MOBILE_VERIFY_RETRIES || MK_DRIVE_CONFIG.MOBILE_VERIFY_RETRIES;
+        this.MOBILE_VERIFY_INTERVAL_MS = config.MOBILE_VERIFY_INTERVAL_MS || MK_DRIVE_CONFIG.MOBILE_VERIFY_INTERVAL_MS;
     }
 
     // ============================================
@@ -37,6 +47,23 @@ class MKDriveAPI {
         try {
             console.log('💾 [SALVAR] Iniciando salvamento...');
             console.log('📦 Dados:', dadosContrato);
+            const mobileContexto = this._isMobileContext();
+            console.log('📱 Contexto mobile detectado:', mobileContexto);
+
+            // No celular/PWA, priorizar no-cors/beacon (mais estável que iframe cross-origin)
+            if (mobileContexto) {
+                try {
+                    return await this._salvarViaNoCorsPOST(dadosContrato);
+                } catch (noCorsError) {
+                    console.warn('⚠️ no-cors POST falhou no mobile:', noCorsError.message);
+                    try {
+                        return await this._salvarViaBeaconPOST(dadosContrato);
+                    } catch (beaconError) {
+                        console.warn('⚠️ Beacon POST também falhou no mobile:', beaconError.message);
+                        // seguir para fluxo normal de fallback abaixo
+                    }
+                }
+            }
 
             // Tentar método POST primeiro
             try {
@@ -44,9 +71,26 @@ class MKDriveAPI {
             } catch (postError) {
                 console.warn('⚠️ POST falhou, tentando método alternativo (GET):', postError.message);
                 
-                // Se POST falhar por CORS, tentar método GET
-                if (postError.message.includes('CORS') || postError.message.includes('Failed to fetch')) {
-                    return await this._salvarViaGET(dadosContrato);
+                // Se POST falhar por CORS/rede, tentar no-cors e depois GET/iframe
+                if (
+                    postError.message.includes('CORS') ||
+                    postError.message.includes('Failed to fetch') ||
+                    postError.message.includes('NetworkError') ||
+                    postError.name === 'TypeError'
+                ) {
+                    try {
+                        return await this._salvarViaNoCorsPOST(dadosContrato);
+                    } catch (noCorsError) {
+                        console.warn('⚠️ no-cors POST falhou, tentando GET/iframe:', noCorsError.message);
+                        if (this._isMobileContext()) {
+                            try {
+                                return await this._salvarViaBeaconPOST(dadosContrato);
+                            } catch (beaconError) {
+                                console.warn('⚠️ Beacon POST falhou, tentando GET/iframe:', beaconError.message);
+                            }
+                        }
+                        return await this._salvarViaGET(dadosContrato);
+                    }
                 } else {
                     throw postError;
                 }
@@ -66,7 +110,7 @@ class MKDriveAPI {
             data: dadosContrato
         };
 
-        const response = await fetch(this.SCRIPT_URL, {
+        const response = await this._fetchWithTimeout(this.SCRIPT_URL, {
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -98,6 +142,86 @@ class MKDriveAPI {
         }
     }
 
+    // Método interno: Salvar via POST no-cors (evita preflight/CORS em host externo)
+    async _salvarViaNoCorsPOST(dadosContrato) {
+        console.log('🔄 Tentando POST no-cors (fallback web/PWA)...');
+
+        const payload = {
+            action: 'save',
+            folderId: this.FOLDER_ID,
+            fileName: this.FILE_NAME,
+            data: dadosContrato
+        };
+
+        await this._fetchWithTimeout(this.SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                // text/plain evita preflight e mantém o payload legível no Apps Script
+                'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const verificacao = await this._verificarComRetentativas(dadosContrato.id_evento);
+        if (verificacao.encontrado) {
+            return {
+                success: true,
+                message: 'Contrato salvo via POST no-cors e confirmado no Google Drive!',
+                total: verificacao.total || 1,
+                id_evento: dadosContrato.id_evento,
+                metodo: 'POST_NO_CORS',
+                confirmado: true
+            };
+        }
+
+        throw new Error('POST no-cors enviado, mas contrato ainda não confirmado');
+    }
+
+    // Método interno: Salvar via sendBeacon (muito confiável em mobile/PWA)
+    async _salvarViaBeaconPOST(dadosContrato) {
+        if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
+            throw new Error('sendBeacon não suportado neste navegador');
+        }
+
+        console.log('🔄 Tentando POST via sendBeacon (fallback mobile)...');
+
+        const payload = {
+            action: 'save',
+            folderId: this.FOLDER_ID,
+            fileName: this.FILE_NAME,
+            data: dadosContrato
+        };
+
+        const blob = new Blob([JSON.stringify(payload)], {
+            type: 'text/plain;charset=UTF-8'
+        });
+
+        const sent = navigator.sendBeacon(this.SCRIPT_URL, blob);
+        if (!sent) {
+            throw new Error('sendBeacon retornou false');
+        }
+
+        const verificacao = await this._verificarComRetentativas(
+            dadosContrato.id_evento,
+            this.MOBILE_VERIFY_RETRIES,
+            this.MOBILE_VERIFY_INTERVAL_MS
+        );
+
+        if (verificacao.encontrado) {
+            return {
+                success: true,
+                message: 'Contrato salvo via sendBeacon e confirmado no Google Drive!',
+                total: verificacao.total || 1,
+                id_evento: dadosContrato.id_evento,
+                metodo: 'BEACON_POST',
+                confirmado: true
+            };
+        }
+
+        throw new Error('sendBeacon enviado, mas contrato ainda não confirmado');
+    }
+
     // Método interno: Salvar via GET (alternativo para CORS)
     async _salvarViaGET(dadosContrato) {
         console.log('🔄 Usando método GET (alternativo para CORS)...');
@@ -126,16 +250,45 @@ class MKDriveAPI {
         }
         
         // Criar URL com dados
-        const url = `${this.SCRIPT_URL}?action=save&folderId=${this.FOLDER_ID}&fileName=${this.FILE_NAME}&data=${encodeURIComponent(dataStringFinal)}`;
+        const encodedData = encodeURIComponent(dataStringFinal);
+        const url = `${this.SCRIPT_URL}?action=save&folderId=${this.FOLDER_ID}&fileName=${this.FILE_NAME}&data=${encodedData}`;
         
         console.log('📤 Enviando via GET:', url.substring(0, 200) + '...');
-        
-        // Usar iframe para contornar CORS completamente
+
+        // Em URLs curtas, tentar GET via fetch primeiro para ter resposta imediata.
+        if (url.length < 1800) {
+            try {
+                const response = await this._fetchWithTimeout(url, {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    return {
+                        success: true,
+                        message: result.message || 'Contrato salvo com sucesso!',
+                        total: result.total,
+                        id_evento: dadosContrato.id_evento,
+                        metodo: 'GET'
+                    };
+                }
+            } catch (error) {
+                console.warn('⚠️ GET via fetch falhou, tentando iframe:', error.message);
+            }
+        }
+
+        // Fallback final para hosts com CORS restritivo
         return await this._salvarViaIframe(dadosParaEnviar);
     }
 
     // Método interno: Salvar via iframe (contorna CORS completamente)
     async _salvarViaIframe(dadosContrato) {
+        if (this._isMobileContext()) {
+            throw new Error('Fallback iframe desativado em mobile/PWA por instabilidade cross-origin');
+        }
+
         return new Promise((resolve, reject) => {
             console.log('🔄 Usando iframe para contornar CORS...');
             console.log('📦 Dados a serem enviados:', dadosContrato);
@@ -173,13 +326,13 @@ class MKDriveAPI {
                 
                 // Tentar verificar se foi salvo
                 try {
-                    const verificacao = await this.buscarContratoPorId(dadosContrato.id_evento);
-                    if (verificacao.success && verificacao.contrato) {
+                    const verificacao = await this._verificarComRetentativas(dadosContrato.id_evento);
+                    if (verificacao.encontrado) {
                         console.log('✅ Contrato confirmado no Google Drive!');
                         resolve({
                             success: true,
                             message: 'Contrato salvo e confirmado no Google Drive!',
-                            total: verificacao.contrato ? 1 : 0,
+                            total: verificacao.total || 1,
                             id_evento: dadosContrato.id_evento,
                             metodo: 'IFRAME',
                             confirmado: true
@@ -442,17 +595,20 @@ class MKDriveAPI {
     async verificarSalvamento(idEvento) {
         try {
             console.log('🔍 Verificando salvamento do contrato:', idEvento);
-            
-            // Aguardar um pouco para garantir que foi escrito
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const resultado = await this.buscarContratoPorId(idEvento);
-            
-            if (resultado.success && resultado.contrato) {
+
+            const isMobile = this._isMobileContext();
+            const verificacao = await this._verificarComRetentativas(
+                idEvento,
+                isMobile ? this.MOBILE_VERIFY_RETRIES : this.VERIFY_RETRIES,
+                isMobile ? this.MOBILE_VERIFY_INTERVAL_MS : this.VERIFY_INTERVAL_MS
+            );
+
+            if (verificacao.encontrado) {
                 return {
                     sucesso: true,
                     encontrado: true,
-                    contrato: resultado.contrato
+                    contrato: verificacao.contrato,
+                    total: verificacao.total
                 };
             } else {
                 return {
@@ -469,6 +625,64 @@ class MKDriveAPI {
                 erro: error.message
             };
         }
+    }
+
+    async _verificarComRetentativas(idEvento, retries = this.VERIFY_RETRIES, intervalMs = this.VERIFY_INTERVAL_MS) {
+        for (let tentativa = 1; tentativa <= retries; tentativa++) {
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+
+            const dados = await this.lerContratos();
+            if (!dados.success) {
+                continue;
+            }
+
+            const contrato = dados.contratos.find(c => c.id_evento === idEvento);
+            if (contrato) {
+                return {
+                    encontrado: true,
+                    contrato,
+                    total: dados.total
+                };
+            }
+
+            console.log(`🔄 Verificação tentativa ${tentativa}/${retries}: contrato ainda não encontrado`);
+        }
+
+        return {
+            encontrado: false,
+            contrato: null,
+            total: 0
+        };
+    }
+
+    async _fetchWithTimeout(url, options = {}) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+
+        try {
+            return await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                throw new Error(`Timeout de ${this.REQUEST_TIMEOUT_MS}ms ao acessar Google Apps Script`);
+            }
+            throw error;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    _isMobileContext() {
+        if (typeof navigator === 'undefined') return false;
+
+        const ua = navigator.userAgent || '';
+        const isMobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone|IEMobile|Opera Mini/i.test(ua);
+        const isStandalone = typeof window !== 'undefined' &&
+            (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+
+        return isMobileUA || isStandalone;
     }
 }
 
