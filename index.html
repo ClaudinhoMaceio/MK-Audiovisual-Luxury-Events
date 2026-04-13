@@ -120,14 +120,8 @@
     <!-- CABEÇALHO -->
     <header class="bg-black text-white py-16 border-b-4 border-[#c5a02e] text-center relative">
         <h1 class="luxury-text text-6xl md:text-8xl font-bold tracking-tighter text-[#c5a02e]">MK</h1>
-        <p class="uppercase tracking-[0.6em] text-[11px] mt-2 font-bold text-gray-400">Audiovisual • Luxury Events</p>
+        <p class="uppercase tracking-[0.6em] text-[11px] mt-2 font-bold text-gray-400">Audiovisual</p>
         <div class="absolute top-4 right-4 flex gap-2">
-            <button id="btn-test-connection" onclick="testarConexao()" class="px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase hover:bg-blue-700 transition-colors">
-                🧪 Testar Conexão
-            </button>
-            <button id="btn-drive-login" onclick="handleDriveLogin()" class="px-4 py-2 bg-[#c5a02e] text-black text-xs font-bold uppercase hover:bg-[#b8941f] transition-colors">
-                Conectar Google Drive
-            </button>
             <button id="btn-drive-stats" onclick="showDriveStats()" class="px-4 py-2 bg-gray-700 text-white text-xs font-bold uppercase hover:bg-gray-600 transition-colors hidden">
                 Ver Contratos
             </button>
@@ -183,6 +177,10 @@
                         <input type="number" id="hours-dj" value="4" min="1" class="w-full p-2 border-b-2 border-black outline-none bg-transparent">
                     </div>
                 </div>
+            </div>
+            <div class="mt-8 max-w-md mx-auto">
+                <label for="event-value" class="text-[10px] font-bold uppercase text-gray-400 block mb-2">Valor do Evento (R$) <span class="text-red-600">*</span></label>
+                <input type="text" id="event-value" oninput="formatCurrencyBRL(this)" inputmode="numeric" class="w-full p-4 border-b-2 border-black outline-none focus:border-black transition-colors text-lg" placeholder="R$ 0,00">
             </div>
             <div class="mt-12 text-center">
                 <button onclick="goToStep(2)" class="bg-black text-[#c5a02e] px-16 py-5 font-bold uppercase tracking-widest hover:scale-105 transition-transform border border-[#c5a02e]">Avançar</button>
@@ -458,10 +456,39 @@
             });
         }
 
-        function validateLogistics() {
-            if(!document.getElementById('dest-number').value || !document.getElementById('event-date').value) {
-                return alert("Por favor, informe o número do endereço e a data do evento.");
+        // Formatação BRL para o campo de valor
+        function formatCurrencyBRL(input) {
+            const onlyDigits = input.value.replace(/\D/g, '');
+            if (!onlyDigits) {
+                input.value = '';
+                return;
             }
+            const numberValue = parseInt(onlyDigits, 10);
+            const cents = (numberValue / 100).toFixed(2);
+            // Converte ponto para vírgula e adiciona separador de milhar
+            const parts = cents.split('.');
+            let integerPart = parts[0];
+            const decimalPart = parts[1];
+            integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            input.value = `R$ ${integerPart},${decimalPart}`;
+        }
+
+        function validateLogistics() {
+            const numero = document.getElementById('dest-number');
+            const dataEvento = document.getElementById('event-date');
+            const valorEvento = document.getElementById('event-value');
+
+            if (!numero.value || !dataEvento.value || !valorEvento.value) {
+                alert("Por favor, informe: número do endereço, data do evento e valor do evento.");
+                if (!numero.value) numero.style.borderBottomColor = '#ef4444';
+                if (!dataEvento.value) dataEvento.style.borderBottomColor = '#ef4444';
+                if (!valorEvento.value) valorEvento.style.borderBottomColor = '#ef4444';
+                return;
+            }
+            // limpar destaques se preenchidos
+            numero.style.borderBottomColor = '';
+            dataEvento.style.borderBottomColor = '';
+            valorEvento.style.borderBottomColor = '';
             goToStep(3);
         }
 
@@ -500,9 +527,20 @@
         function goToStep(s) {
             console.log('goToStep chamado com:', s);
             
-            if(s === 2 && selectedServices.length === 0) {
-                alert("Selecione ao menos um serviço.");
-                return false;
+            if (s === 2) {
+                if (selectedServices.length === 0) {
+                    alert("Selecione ao menos um serviço.");
+                    return false;
+                }
+                const valorEvento = document.getElementById('event-value');
+                if (!valorEvento.value) {
+                    alert("Informe o Valor do Evento (R$) antes de avançar.");
+                    valorEvento.style.borderBottomColor = '#ef4444';
+                    valorEvento.focus();
+                    return false;
+                } else {
+                    valorEvento.style.borderBottomColor = '';
+                }
             }
             
             try {
@@ -589,6 +627,7 @@
                 const number = document.getElementById('dest-number')?.value || '';
                 const city = document.getElementById('dest-city')?.value || '';
                 const end = `${street}, ${number} - ${city}`;
+                const valorEvento = document.getElementById('event-value')?.value || '';
                 
                 let servs = selectedServices.map(s => {
                     let h = "";
@@ -629,6 +668,7 @@
                         <p>O presente instrumento tem como objeto a locação e operação técnica dos seguintes itens:</p>
                         <ul class="my-4 font-semibold">${servs || '<li>Nenhum serviço selecionado</li>'}</ul>
                         <p><strong>DATA E LOCAL:</strong> O evento será realizado em <strong>${data}</strong> no endereço <strong>${end}</strong>.</p>
+                        <p class="mt-2"><strong>VALOR TOTAL:</strong> ${valorEvento || 'A definir'}</p>
                         <p class="mt-6 font-bold uppercase text-red-700">CLÁUSULA DE CANCELAMENTO E SINAL:</p>
                         <p class="italic border-l-4 border-black pl-4 my-2">
                             "O valor pago a título de sinal (reserva de data) não será reembolsável em caso de cancelamento por parte do contratante, servindo para cobrir a reserva da agenda e custos administrativos da contratada."
@@ -667,7 +707,8 @@
                 logistica: {
                     data: document.getElementById('event-date').value.split('-').reverse().join('/'),
                     endereco: document.getElementById('dest-street').value + ", " + document.getElementById('dest-number').value,
-                    cidade: document.getElementById('dest-city').value
+                    cidade: document.getElementById('dest-city').value,
+                    valor_evento: document.getElementById('event-value').value
                 },
                 servicos: selectedServices.map(s => {
                     let h = "";
@@ -821,6 +862,12 @@
             pdf.text(`Data: ${dataFinal.logistica.data}`, 25, yPos);
             yPos += 7;
             pdf.text(`Local: ${dataFinal.logistica.endereco} - ${dataFinal.logistica.cidade}`, 25, yPos);
+            yPos += 7;
+            pdf.setFont("helvetica", "bold");
+            pdf.text("VALOR DO EVENTO:", 20, yPos);
+            pdf.setFont("helvetica", "normal");
+            yPos += 7;
+            pdf.text(`${dataFinal.logistica.valor_evento || 'A definir'}`, 25, yPos);
 
             // Cláusulas
             yPos += 12;
@@ -1220,7 +1267,6 @@
                 <!-- Informações -->
                 <div>
                     <h3 class="luxury-text text-2xl text-[#c5a02e] mb-4">MK Audiovisual</h3>
-                    <p class="text-xs text-gray-400 mb-2">Luxury Events</p>
                     <p class="text-xs text-gray-400">Francisco Morato, SP</p>
                 </div>
                 

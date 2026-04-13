@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MK Audiovisual - Gestão Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --neon-gold: #c5a02e;
+            --bg-dark: #050505;
+            --card-bg: rgba(18, 18, 18, 0.9);
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: #e0e0e0;
+            font-family: 'Rajdhani', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+        #canvas-3d {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; pointer-events: none;
+        }
+        .futuristic-font { font-family: 'Orbitron', sans-serif; }
+        .gold-glow { text-shadow: 0 0 15px rgba(197, 160, 46, 0.6); }
+        .glass { background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid rgba(197, 160, 46, 0.2); }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .calendar-day {
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+            font-size: 11px; background: rgba(255,255,255,0.03); border-radius: 6px;
+        }
+        .day-active { background: var(--neon-gold); color: black; font-weight: bold; box-shadow: 0 0 15px var(--neon-gold); }
+
+        #edit-panel {
+            position: fixed; right: -400px; top: 0; width: 380px; height: 100vh;
+            z-index: 100; transition: right 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        #edit-panel.active { right: 0; }
+
+        .loading-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        @keyframes pulse-gold {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .sync-active { animation: pulse-gold 1.5s infinite; }
+        .saving-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.8);
+            display: none; flex-direction: column; justify-content: center; align-items: center; border-radius: inherit; z-index: 50;
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--neon-gold); border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas-3d"></canvas>
+    
+    <div id="loading" class="loading-overlay">
+        <div class="text-center">
+            <div class="text-[#c5a02e] futuristic-font animate-pulse text-2xl mb-4">MK SYSTEM CORE</div>
+            <div id="loading-text" class="text-gray-500 text-[10px] uppercase tracking-[0.3em]">Conectando ao Banco de Dados...</div>
+        </div>
+    </div>
+
+    <!-- PANEL EDIT -->
+    <div id="edit-panel" class="glass p-8 shadow-2xl overflow-y-auto">
+        <div id="saving-indicator" class="saving-overlay">
+            <div class="text-[#c5a02e] text-xs font-bold animate-bounce mb-2">GRAVANDO NO DRIVE...</div>
+            <div class="w-20 h-1 bg-gray-800 rounded-full overflow-hidden">
+                <div class="w-full h-full bg-[#c5a02e] animate-[loading_2s_infinite]"></div>
+            </div>
+        </div>
+        <div class="flex justify-between items-center mb-10">
+            <h2 class="futuristic-font text-[#c5a02e] text-xl gold-glow">DETALHES DO EVENTO</h2>
+            <button onclick="togglePanel(false)" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+        </div>
+        
+        <div class="space-y-6">
+            <div class="p-5 bg-black/40 rounded-xl border border-white/5">
+                <p id="view-id" class="text-[9px] text-gray-600 mb-1 text-right">ID: #000</p>
+                <h3 id="view-client" class="text-xl font-bold text-white mb-1">Nome do Cliente</h3>
+                <p id="view-date" class="text-[#c5a02e] text-xs uppercase tracking-widest">00/00/0000</p>
+            </div>
+            <div>
+                <label class="text-[10px] uppercase text-gray-500 block mb-2 font-bold italic">Valor do Contrato (R$)</label>
+                <input type="number" id="field-value" step="0.01" class="w-full bg-black/50 border border-gray-800 p-4 rounded-lg text-white focus:border-[#c5a02e] outline-none text-xl font-bold">
+            </div>
+            <div>
+                <label class="text-[10px] uppercase text-gray-500 block mb-2 font-bold italic">Status Operacional</label>
+                <select id="field-status" class="w-full bg-black/50 border border-gray-800 p-4 rounded-lg text-white focus:border-[#c5a02e] outline-none">
+                    <option value="confirmado">Confirmado</option>
+                    <option value="pendente">Pendente</option>
+                    <option value="concluido">Arquivado / Concluído</option>
+                </select>
+            </div>
+            <div class="pt-10">
+                <button id="btn-save-changes" onclick="saveChanges()" class="w-full bg-[#c5a02e] text-black font-bold p-4 rounded-lg uppercase text-xs tracking-[0.3em] hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(197,160,46,0.3)]">
+                    Salvar Alterações
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-4 md:p-10 max-w-[1600px] mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-12">
+            <div>
+                <h1 class="futuristic-font text-4xl font-bold text-[#c5a02e] gold-glow mb-1">MK SYSTEM CORE</h1>
+                <div class="flex items-center gap-2">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-[0.5em]">Live Drive Sync Active</p>
+                </div>
+            </div>
+            <button id="btn-sync" onclick="fetchData()" class="mt-6 md:mt-0 glass px-10 py-4 rounded-full text-xs font-bold uppercase tracking-widest hover:bg-[#c5a02e] hover:text-black transition-all">
+                Sincronizar Manual
+            </button>
+        </header>
+
+        <!-- FINANCEIRO -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+            <div class="glass p-6 rounded-2xl border-l-4 border-[#c5a02e]">
+                <p class="text-gray-500 text-[10px] uppercase mb-2 italic">Receita Bruta Total</p>
+                <p id="stat-total" class="text-2xl font-bold futuristic-font">R$ 0,00</p>
+            </div>
+            <div class="glass p-6 rounded-2xl border-l-4 border-red-500">
+                <p class="text-gray-500 text-[10px] uppercase mb-2 italic">Reserva de Custos (15%)</p>
+                <p id="stat-costs" class="text-2xl font-bold futuristic-font text-red-400">R$ 0,00</p>
+            </div>
+            <div class="glass p-6 rounded-2xl border-l-4 border-purple-500">
+                <p class="text-gray-500 text-[10px] uppercase mb-2 italic">Dívidas Fixas / Cartões</p>
+                <p id="stat-debts" class="text-2xl font-bold futuristic-font text-purple-400">R$ 0,00</p>
+            </div>
+            <div class="glass p-6 rounded-2xl border-l-4 border-green-500">
+                <p class="text-gray-500 text-[10px] uppercase mb-2 italic">Saldo de Partilha</p>
+                <p id="stat-net" class="text-2xl font-bold futuristic-font text-green-400">R$ 0,00</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <div class="lg:col-span-4 space-y-8">
+                <div class="glass p-8 rounded-3xl">
+                    <h2 class="futuristic-font text-sm text-[#c5a02e] mb-6 flex items-center gap-3 italic">AGENDA OPERACIONAL</h2>
+                    <div id="calendar" class="calendar-grid"></div>
+                </div>
+                <div id="alerts" class="space-y-4"></div>
+                <div class="glass p-8 rounded-3xl">
+                    <div class="flex gap-6 border-b border-white/5 mb-6">
+                        <button onclick="setTab('active')" id="tab-active" class="pb-3 text-xs font-bold uppercase tracking-widest border-b-2 border-[#c5a02e]">Próximos</button>
+                        <button onclick="setTab('archive')" id="tab-archive" class="pb-3 text-xs font-bold uppercase tracking-widest text-gray-500">Arquivo</button>
+                    </div>
+                    <div id="list-events" class="space-y-4 max-h-[400px] overflow-y-auto pr-2"></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- CALCULADORA DE PARTILHA -->
+                    <div class="glass p-8 rounded-3xl">
+                        <h3 class="futuristic-font text-lg mb-6 text-[#c5a02e]">DIVISÃO DE LUCROS</h3>
+                        <div class="space-y-4">
+                            <select id="calc-select" onchange="autoFillCalc()" class="w-full bg-black/40 border border-gray-800 p-3 rounded-lg text-sm text-white focus:border-[#c5a02e] outline-none">
+                                <option value="">Selecionar Evento...</option>
+                            </select>
+                            <input type="number" id="calc-val" placeholder="Valor Bruto" class="w-full bg-black/40 border border-gray-800 p-3 rounded-lg text-sm text-white focus:border-[#c5a02e] outline-none">
+                            <input type="number" id="calc-exp" placeholder="Gastos Extras" class="w-full bg-black/40 border border-gray-800 p-3 rounded-lg text-sm text-white focus:border-[#c5a02e] outline-none">
+                            <button onclick="calcProfit()" class="w-full bg-[#c5a02e] text-black font-bold py-3 rounded-lg text-[10px] uppercase tracking-widest hover:brightness-110">Calcular Divisão (1/3)</button>
+                            <div class="grid grid-cols-3 gap-2 mt-4 text-[10px]">
+                                <div class="text-center p-2 bg-white/5 rounded">
+                                    <p class="text-gray-500">MIKAEL</p>
+                                    <p id="res-1" class="font-bold">R$ 0</p>
+                                </div>
+                                <div class="text-center p-2 bg-white/5 rounded">
+                                    <p class="text-gray-500">CLAUDINHO</p>
+                                    <p id="res-2" class="font-bold">R$ 0</p>
+                                </div>
+                                <div class="text-center p-2 bg-[#c5a02e]/10 rounded border border-[#c5a02e]/20">
+                                    <p class="text-[#c5a02e]">EMPRESA</p>
+                                    <p id="res-3" class="font-bold text-[#c5a02e]">R$ 0</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GESTÃO DE DÍVIDAS -->
+                    <div class="glass p-8 rounded-3xl relative overflow-hidden">
+                        <div id="debt-loading" class="absolute inset-0 bg-black/60 hidden items-center justify-center z-20">
+                            <span class="text-[#c5a02e] text-[10px] font-bold animate-pulse">ATUALIZANDO BANCO...</span>
+                        </div>
+                        <h3 class="futuristic-font text-lg mb-6 text-red-500 italic">CONTROLE DE CUSTOS</h3>
+                        <div class="space-y-4">
+                            <div class="space-y-2">
+                                <div class="flex gap-2">
+                                    <select id="debt-type" onchange="toggleCardOptions()" class="w-1/2 bg-black/40 border border-gray-800 p-3 rounded-lg text-[10px] text-white focus:border-red-500 outline-none">
+                                        <option value="Cartão">Cartão de Crédito</option>
+                                        <option value="Parcela">Parcelas Fixas</option>
+                                        <option value="Outros">Outras Dívidas</option>
+                                    </select>
+                                    <input type="text" id="debt-n" placeholder="Descrição" class="w-1/2 bg-black/40 border border-gray-800 p-3 rounded-lg text-xs text-white focus:border-red-500 outline-none">
+                                </div>
+                                
+                                <div id="card-options" class="flex gap-2">
+                                    <input type="number" id="debt-installments" placeholder="Qtd Parcelas" class="w-1/2 bg-black/40 border border-gray-800 p-3 rounded-lg text-xs text-white focus:border-red-500 outline-none">
+                                    <input type="date" id="debt-start-date" class="w-1/2 bg-black/40 border border-gray-800 p-3 rounded-lg text-xs text-white focus:border-red-500 outline-none">
+                                </div>
+
+                                <div class="flex gap-2">
+                                    <input type="number" id="debt-v" placeholder="Valor Total R$" class="flex-1 bg-black/40 border border-gray-800 p-3 rounded-lg text-xs text-white focus:border-red-500 outline-none">
+                                    <button onclick="saveDebt()" class="bg-red-600 px-6 rounded-lg font-bold text-white shadow-lg shadow-red-900/20 hover:scale-105 active:scale-95 transition-all">+</button>
+                                </div>
+                            </div>
+                            <div id="list-debts" class="space-y-2 max-h-[250px] overflow-y-auto pr-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÕES DE API (ATUALIZADAS)
+        const DEPLOY_URL = "https://script.google.com/macros/s/AKfycbz4i-6j6QT4KjYWWGvBFvCShB4sRs9c3_JB6xsqt5kZeVcf2rtL-qOCvsx_MHDmnM_b/exec";
+        const FOLDER_ID = "16kt50n_MFB60_h3JFgIA408k8YrjU6Rb";
+        const FILE_NAME = "mk_audiovisual_contratos.json";
+
+        let db_raw_data = []; 
+        let db_events = [];   
+        let db_debts = [];
+        let activeTab = 'active';
+        let isSyncing = false;
+
+        window.addEventListener('load', () => {
+            try {
+                initBackground();
+                
+                // Inicializar dados vazios se necessário
+                if (!db_raw_data) db_raw_data = [];
+                if (!db_events) db_events = [];
+                if (!db_debts) db_debts = [];
+                
+                // Carregar dados do servidor
+                fetchData().finally(() => {
+                    const loadingEl = document.getElementById('loading');
+                    if (loadingEl) loadingEl.style.display = 'none';
+                });
+                
+                // Auto sync a cada 40 segundos para manter tudo fresco sem sobrecarregar
+                setInterval(() => { 
+                    if(!isSyncing) {
+                        fetchData();
+                    }
+                }, 40000);
+            } catch (error) {
+                console.error("❌ Erro na inicialização:", error);
+                const loadingEl = document.getElementById('loading');
+                if (loadingEl) {
+                    loadingEl.innerHTML = `
+                        <div class="text-center">
+                            <div class="text-red-500 futuristic-font text-xl mb-4">ERRO DE INICIALIZAÇÃO</div>
+                            <div class="text-gray-500 text-xs">${error.message}</div>
+                        </div>
+                    `;
+                }
+            }
+        });
+
+        // LER DADOS DO DRIVE (com suporte CORS)
+        async function fetchData() {
+            if (isSyncing) return;
+            isSyncing = true;
+            const btn = document.getElementById('btn-sync');
+            if(btn) btn.classList.add('sync-active');
+
+            try {
+                const url = `${DEPLOY_URL}?action=read&folderId=${FOLDER_ID}&fileName=${FILE_NAME}&t=${Date.now()}`;
+                
+                // Tentar fetch normal primeiro
+                let response;
+                try {
+                    response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors',
+                        cache: 'no-cache'
+                    });
+                } catch (corsError) {
+                    // Se falhar por CORS, usar JSONP como fallback
+                    console.warn("⚠️ CORS bloqueado, tentando método alternativo...");
+                    const result = await fetchDataJSONP();
+                    if (result) {
+                        processData(result);
+                        return;
+                    }
+                    throw corsError;
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                processData(result);
+
+            } catch (err) {
+                console.error("❌ Erro na sincronização de leitura:", err);
+                // Manter dados existentes em caso de erro
+                if (!db_raw_data) db_raw_data = [];
+                if (!db_events) db_events = [];
+                if (!db_debts) db_debts = [];
+            } finally {
+                isSyncing = false;
+                if(btn) btn.classList.remove('sync-active');
+                refreshUI();
+            }
+        }
+
+        // Método alternativo usando JSONP para contornar CORS
+        function fetchDataJSONP() {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'jsonp_callback_' + Date.now();
+                const url = `${DEPLOY_URL}?action=read&folderId=${FOLDER_ID}&fileName=${FILE_NAME}&callback=${callbackName}&t=${Date.now()}`;
+                
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(data);
+                };
+                
+                const script = document.createElement('script');
+                script.src = url;
+                script.onerror = () => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    reject(new Error('JSONP failed'));
+                };
+                document.body.appendChild(script);
+                
+                // Timeout após 10 segundos
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        reject(new Error('JSONP timeout'));
+                    }
+                }, 10000);
+            });
+        }
+
+        // Processar dados recebidos
+        function processData(result) {
+            if (result.success && result.data) {
+                // Contratos
+                db_raw_data = result.data.contratos || [];
+                db_events = db_raw_data.map(c => ({
+                    id: c.id_evento,
+                    cliente: c.cliente ? c.cliente.nome : "Sem Nome",
+                    data_original: c.logistica ? c.logistica.data : "00/00/0000",
+                    data_iso: convertToISO(c.logistica ? c.logistica.data : ""),
+                    valor: parseFloat(c.valor) || 0,
+                    status: c.status || "confirmado"
+                }));
+                
+                // Dívidas
+                db_debts = result.data.dividas || [];
+                
+                console.log(`✅ Dados carregados: ${db_events.length} eventos, ${db_debts.length} dívidas`);
+            } else {
+                console.warn("⚠️ Resposta sem dados válidos:", result);
+                // Inicializar estruturas vazias se não houver dados
+                if (!db_raw_data) db_raw_data = [];
+                if (!db_events) db_events = [];
+                if (!db_debts) db_debts = [];
+            }
+        }
+
+        // SALVAR ESTADO COMPLETO NO DRIVE (com suporte CORS)
+        async function syncFullToDrive() {
+            try {
+                // Preparar dados completos incluindo dívidas
+                const fullData = {
+                    contratos: db_raw_data || [],
+                    dividas: db_debts || [],
+                    ultima_atualizacao: new Date().toISOString()
+                };
+
+                const payload = {
+                    action: 'saveFull',
+                    folderId: FOLDER_ID,
+                    fileName: FILE_NAME,
+                    data: fullData
+                };
+
+                let response;
+                try {
+                    response = await fetch(DEPLOY_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                } catch (corsError) {
+                    // Se falhar por CORS, usar método alternativo via GET
+                    console.warn("⚠️ CORS bloqueado no POST, tentando método alternativo...");
+                    return await syncFullToDriveAlternative(fullData);
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (!result.success) {
+                    console.error("Erro do servidor:", result.error);
+                    return { success: false, error: result.error || "Erro desconhecido" };
+                }
+
+                return result;
+            } catch (error) {
+                console.error("Erro no Sync:", error);
+                return { success: false, error: error.message || "Conexão perdida" };
+            }
+        }
+
+        // Método alternativo para salvar (via URL GET para contornar CORS)
+        async function syncFullToDriveAlternative(fullData) {
+            try {
+                const payload = {
+                    action: 'saveFull',
+                    folderId: FOLDER_ID,
+                    fileName: FILE_NAME,
+                    data: fullData
+                };
+                
+                // Usar método GET com dados codificados na URL
+                const dataEncoded = encodeURIComponent(JSON.stringify(payload));
+                const url = `${DEPLOY_URL}?data=${dataEncoded}&t=${Date.now()}`;
+                
+                // Criar script tag para fazer requisição (bypass CORS)
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.onload = () => {
+                        document.body.removeChild(script);
+                        // Assumir sucesso se não houver erro
+                        resolve({ success: true, message: 'Dados enviados (método alternativo)' });
+                    };
+                    script.onerror = () => {
+                        document.body.removeChild(script);
+                        reject(new Error('Falha ao enviar dados'));
+                    };
+                    document.body.appendChild(script);
+                    
+                    // Timeout de 10 segundos
+                    setTimeout(() => {
+                        if (script.parentNode) {
+                            document.body.removeChild(script);
+                            reject(new Error('Timeout ao enviar dados'));
+                        }
+                    }, 10000);
+                });
+            } catch (error) {
+                console.error("Erro no método alternativo:", error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        // ATUALIZAR CONTRATO
+        async function saveChanges() {
+            const idElement = document.getElementById('view-id');
+            if (!idElement) {
+                alert("Erro: Elemento não encontrado.");
+                return;
+            }
+
+            const id = idElement.innerText.replace('ID: #', '').trim();
+            if (!id) {
+                alert("Erro: ID do evento não encontrado.");
+                return;
+            }
+
+            const novoValor = parseFloat(document.getElementById('field-value').value) || 0;
+            const novoStatus = document.getElementById('field-status').value;
+
+            const savingIndicator = document.getElementById('saving-indicator');
+            if (savingIndicator) savingIndicator.style.display = 'flex';
+            
+            try {
+                // Alterar no raw data local
+                const idx = db_raw_data.findIndex(c => String(c.id_evento) === String(id));
+                if (idx !== -1) {
+                    db_raw_data[idx].valor = novoValor;
+                    db_raw_data[idx].status = novoStatus;
+                } else {
+                    console.warn("⚠️ Contrato não encontrado no banco local:", id);
+                }
+
+                const res = await syncFullToDrive();
+                if (res.success) {
+                    // Sincroniza UI
+                    const evIdx = db_events.findIndex(e => String(e.id) === String(id));
+                    if(evIdx !== -1) {
+                        db_events[evIdx].valor = novoValor;
+                        db_events[evIdx].status = novoStatus;
+                    }
+                    refreshUI();
+                    togglePanel(false);
+                    console.log("✅ Alterações salvas com sucesso!");
+                } else {
+                    alert("Falha ao salvar no servidor: " + (res.error || "Erro desconhecido"));
+                }
+            } catch (error) {
+                console.error("❌ Erro ao salvar alterações:", error);
+                alert("Erro ao salvar: " + error.message);
+            } finally {
+                if (savingIndicator) savingIndicator.style.display = 'none';
+            }
+        }
+
+        // ADICIONAR DÍVIDA
+        async function saveDebt() {
+            const type = document.getElementById('debt-type').value;
+            const name = document.getElementById('debt-n').value.trim();
+            const val = parseFloat(document.getElementById('debt-v').value);
+            
+            if(!name || !val || val <= 0) {
+                alert("Por favor, preencha todos os campos corretamente.");
+                return;
+            }
+
+            const debtLoading = document.getElementById('debt-loading');
+            if (debtLoading) debtLoading.style.display = 'flex';
+            
+            try {
+                if (!db_debts) db_debts = [];
+                
+                db_debts.push({ 
+                    tipo: type, 
+                    nome: name, 
+                    valor: val, 
+                    data: new Date().toLocaleDateString('pt-BR'),
+                    id: Date.now() 
+                });
+
+                const res = await syncFullToDrive();
+                if (!res.success) {
+                    alert("Erro ao sincronizar dívida com o Drive: " + (res.error || "Erro desconhecido"));
+                    // Remover do array local se falhou
+                    db_debts.pop();
+                } else {
+                    console.log("✅ Dívida salva com sucesso!");
+                    document.getElementById('debt-n').value = '';
+                    document.getElementById('debt-v').value = '';
+                }
+            } catch (error) {
+                console.error("❌ Erro ao salvar dívida:", error);
+                alert("Erro ao salvar dívida: " + error.message);
+            } finally {
+                if (debtLoading) debtLoading.style.display = 'none';
+                refreshUI();
+            }
+        }
+
+        // REMOVER DÍVIDA
+        async function deleteDebt(id) {
+            if(!confirm("Deseja remover esta dívida do banco de dados?")) return;
+            
+            const debtLoading = document.getElementById('debt-loading');
+            if (debtLoading) debtLoading.style.display = 'flex';
+            
+            try {
+                const originalLength = db_debts.length;
+                db_debts = db_debts.filter(d => d.id !== id);
+                
+                if (db_debts.length === originalLength) {
+                    console.warn("⚠️ Dívida não encontrada para remoção:", id);
+                    if (debtLoading) debtLoading.style.display = 'none';
+                    return;
+                }
+                
+                const res = await syncFullToDrive();
+                
+                if (!res.success) {
+                    alert("Erro ao remover do Drive: " + (res.error || "Erro desconhecido"));
+                    // Recarregar dados do servidor em caso de erro
+                    await fetchData();
+                } else {
+                    console.log("✅ Dívida removida com sucesso!");
+                }
+            } catch (error) {
+                console.error("❌ Erro ao remover dívida:", error);
+                alert("Erro ao remover: " + error.message);
+            } finally {
+                if (debtLoading) debtLoading.style.display = 'none';
+                refreshUI();
+            }
+        }
+
+        // HELPERS UI
+        function convertToISO(str) {
+            if(!str || !str.includes('/')) return "2026-01-01";
+            const parts = str.split('/');
+            const [d, m, y] = parts;
+            return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        }
+
+        function refreshUI() {
+            try {
+                renderList();
+                renderCalendar();
+                updateStats();
+                renderDebts();
+                checkAlerts();
+                fillSelect();
+            } catch (error) {
+                console.error("❌ Erro ao atualizar UI:", error);
+            }
+        }
+
+        function renderList() {
+            const container = document.getElementById('list-events');
+            if(!container) {
+                console.warn("⚠️ Container de eventos não encontrado");
+                return;
+            }
+            container.innerHTML = '';
+            
+            if (!db_events || db_events.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-xs text-center py-4">Nenhum evento encontrado</p>';
+                return;
+            }
+            
+            const filtered = db_events.filter(e => activeTab === 'active' ? e.status !== 'concluido' : e.status === 'concluido');
+            
+            if (filtered.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-xs text-center py-4">Nenhum evento nesta categoria</p>';
+                return;
+            }
+            
+            filtered.forEach(ev => {
+                const div = document.createElement('div');
+                div.className = "p-4 glass rounded-xl cursor-pointer border border-white/5 hover:border-[#c5a02e] transition-all group";
+                div.onclick = () => openEdit(ev.id);
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="font-bold text-sm text-white group-hover:text-[#c5a02e] transition-colors">${(ev.cliente || 'Sem Nome').toUpperCase()}</p>
+                            <p class="text-[9px] text-gray-500">${ev.data_original || '00/00/0000'}</p>
+                        </div>
+                        <p class="text-xs font-bold text-[#c5a02e]">R$ ${(ev.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    </div>`;
+                container.appendChild(div);
+            });
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar');
+            grid.innerHTML = '';
+            const bookedDays = db_events.filter(e => e.status !== 'concluido').map(e => new Date(e.data_iso).getDate());
+            for(let i=1; i<=31; i++) {
+                grid.innerHTML += `<div class="calendar-day ${bookedDays.includes(i) ? 'day-active' : ''}">${i}</div>`;
+            }
+        }
+
+        function updateStats() {
+            try {
+                const bruto = (db_events || []).reduce((acc, c) => acc + (parseFloat(c.valor) || 0), 0);
+                const dividas = (db_debts || []).reduce((acc, c) => acc + (parseFloat(c.valor) || 0), 0);
+                
+                const statTotal = document.getElementById('stat-total');
+                const statCosts = document.getElementById('stat-costs');
+                const statDebts = document.getElementById('stat-debts');
+                const statNet = document.getElementById('stat-net');
+                
+                if (statTotal) statTotal.innerText = "R$ " + bruto.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                if (statCosts) statCosts.innerText = "R$ " + (bruto * 0.15).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                if (statDebts) statDebts.innerText = "R$ " + dividas.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                if (statNet) statNet.innerText = "R$ " + Math.max(0, bruto * 0.85 - dividas).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+            } catch (error) {
+                console.error("❌ Erro ao atualizar estatísticas:", error);
+            }
+        }
+
+        function renderDebts() {
+            const list = document.getElementById('list-debts');
+            if (!list) {
+                console.warn("⚠️ Container de dívidas não encontrado");
+                return;
+            }
+            list.innerHTML = '';
+            
+            if (!db_debts || db_debts.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-[10px] text-center py-2">Nenhuma dívida registrada</p>';
+                return;
+            }
+            
+            db_debts.forEach((d) => {
+                const debtDiv = document.createElement('div');
+                debtDiv.className = "p-3 bg-white/5 rounded-lg text-xs border border-white/5 group transition-all";
+                debtDiv.innerHTML = `
+                    <div class="flex justify-between text-[8px] font-bold text-red-500 uppercase mb-1">
+                        <span>${d.tipo || 'N/A'} • ${d.data || 'N/A'}</span>
+                        <button onclick="deleteDebt(${d.id})" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">REMOVER</button>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-white">${d.nome || 'Sem nome'}</span>
+                        <span class="text-red-400 font-bold">R$ ${(d.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                    </div>`;
+                list.appendChild(debtDiv);
+            });
+        }
+
+        function openEdit(id) { 
+            const ev = db_events.find(x => String(x.id) === String(id));
+            if(!ev) {
+                console.warn("⚠️ Evento não encontrado:", id);
+                return;
+            }
+            
+            const viewId = document.getElementById('view-id');
+            const viewClient = document.getElementById('view-client');
+            const viewDate = document.getElementById('view-date');
+            const fieldValue = document.getElementById('field-value');
+            const fieldStatus = document.getElementById('field-status');
+            
+            if (viewId) viewId.innerText = `ID: #${ev.id}`;
+            if (viewClient) viewClient.innerText = ev.cliente || 'Sem Nome';
+            if (viewDate) viewDate.innerText = ev.data_original || '00/00/0000';
+            if (fieldValue) fieldValue.value = ev.valor || 0;
+            if (fieldStatus) fieldStatus.value = ev.status || 'confirmado';
+            
+            togglePanel(true); 
+        }
+        
+        function togglePanel(s) { const p = document.getElementById('edit-panel'); if(p) p.classList.toggle('active', s); }
+
+        function setTab(t) { 
+            activeTab = t; 
+            document.getElementById('tab-active').className = t === 'active' ? 'pb-3 text-xs font-bold uppercase tracking-widest border-b-2 border-[#c5a02e]' : 'pb-3 text-xs font-bold uppercase tracking-widest text-gray-500';
+            document.getElementById('tab-archive').className = t === 'archive' ? 'pb-3 text-xs font-bold uppercase tracking-widest border-b-2 border-[#c5a02e]' : 'pb-3 text-xs font-bold uppercase tracking-widest text-gray-500';
+            refreshUI(); 
+        }
+
+        function initBackground() {
+            try {
+                const canvas = document.getElementById('canvas-3d');
+                if (!canvas) {
+                    console.warn("⚠️ Canvas 3D não encontrado");
+                    return;
+                }
+                
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
+                const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                
+                const geo = new THREE.BufferGeometry();
+                const pos = [];
+                for(let i=0; i<1500; i++) {
+                    pos.push((Math.random()-0.5)*1800, (Math.random()-0.5)*1800, (Math.random()-0.5)*1800);
+                }
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                const particles = new THREE.Points(geo, new THREE.PointsMaterial({ 
+                    color: 0xc5a02e, 
+                    size: 1.5, 
+                    transparent: true, 
+                    opacity: 0.2 
+                }));
+                scene.add(particles);
+                camera.position.z = 1000;
+                
+                function animate() { 
+                    requestAnimationFrame(animate); 
+                    particles.rotation.y += 0.0003; 
+                    renderer.render(scene, camera); 
+                }
+                animate();
+                
+                // Ajustar tamanho ao redimensionar janela
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            } catch (error) {
+                console.error("❌ Erro ao inicializar background 3D:", error);
+            }
+        }
+
+        function fillSelect() {
+            const sel = document.getElementById('calc-select');
+            if (!sel) {
+                console.warn("⚠️ Select de cálculo não encontrado");
+                return;
+            }
+            
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">Selecionar Evento...</option>';
+            
+            if (db_events && db_events.length > 0) {
+                db_events.filter(e => e.status !== 'concluido').forEach(e => {
+                    const option = document.createElement('option');
+                    option.value = e.valor || 0;
+                    option.textContent = e.cliente || 'Sem Nome';
+                    if (cur == e.valor) option.selected = true;
+                    sel.appendChild(option);
+                });
+            }
+        }
+        function autoFillCalc() { const v = document.getElementById('calc-select').value; if(v) document.getElementById('calc-val').value = v; }
+        
+        function calcProfit() {
+            const v = parseFloat(document.getElementById('calc-val').value) || 0;
+            const e = parseFloat(document.getElementById('calc-exp').value) || 0;
+            const res = (v - e) / 3;
+            document.getElementById('res-1').innerText = "R$ " + res.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+            document.getElementById('res-2').innerText = "R$ " + res.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+            document.getElementById('res-3').innerText = "R$ " + res.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        }
+        
+        function toggleCardOptions() {
+            const type = document.getElementById('debt-type').value;
+            document.getElementById('card-options').style.display = (type === 'Cartão' || type === 'Parcela') ? 'flex' : 'none';
+        }
+
+        function checkAlerts() {
+            const box = document.getElementById('alerts');
+            if (!box) {
+                console.warn("⚠️ Container de alertas não encontrado");
+                return;
+            }
+            
+            box.innerHTML = '';
+            
+            if (!db_events || db_events.length === 0) return;
+            
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            
+            db_events.forEach(ev => {
+                try {
+                    if (!ev.data_iso) return;
+                    const eventDate = new Date(ev.data_iso);
+                    eventDate.setHours(0, 0, 0, 0);
+                    
+                    if (eventDate < now && ev.status !== 'concluido') {
+                        const alertDiv = document.createElement('div');
+                        alertDiv.className = "p-4 bg-red-950/20 border border-red-900 rounded-2xl text-[10px] mb-2";
+                        alertDiv.innerHTML = `
+                            <p class="text-red-500 font-bold mb-1 uppercase tracking-widest">Alerta: Evento Passado não Arquivado</p>
+                            <p class="text-white">${(ev.cliente || 'Sem Nome').toUpperCase()}</p>`;
+                        box.appendChild(alertDiv);
+                    }
+                } catch (error) {
+                    console.warn("⚠️ Erro ao verificar alerta para evento:", ev.id, error);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

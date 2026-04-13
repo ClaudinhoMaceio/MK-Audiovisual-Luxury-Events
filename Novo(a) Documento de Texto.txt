@@ -1,0 +1,262 @@
+function doGet(e) {
+  try {
+    // Obter parâmetros
+    const action = e.parameter.action || 'read';
+    const folderId = e.parameter.folderId || '16kt50n_MFB60_h3JFgIA408k8YrjU6Rb';
+    const fileName = e.parameter.fileName || 'mk_audiovisual_contratos.json';
+    
+    // Log para debug
+    console.log('doGet chamado:', { action, folderId, fileName });
+    
+    // Processar ação
+    if (action === 'read') {
+      return readData(folderId, fileName);
+    } else if (action === 'save') {
+      // doGet também pode receber dados via GET (método alternativo para CORS)
+      const dataParam = e.parameter.data;
+      if (dataParam) {
+        try {
+          const data = JSON.parse(decodeURIComponent(dataParam));
+          console.log('Salvando via GET (método alternativo)');
+          return saveData(folderId, fileName, data);
+        } catch (error) {
+          return createErrorResponse('Erro ao processar dados: ' + error.toString());
+        }
+      } else {
+        return createErrorResponse('Parâmetro "data" não fornecido');
+      }
+    } else {
+      return createErrorResponse('Ação não reconhecida: ' + action);
+    }
+  } catch (error) {
+    console.error('Erro em doGet:', error);
+    return createErrorResponse('Erro ao processar requisição: ' + error.toString());
+  }
+}
+
+// ============================================
+// FUNÇÃO PRINCIPAL: doPost (Salvar Dados)
+// ============================================
+function doPost(e) {
+  try {
+    // Obter dados do POST
+    const postData = e.postData.contents;
+    console.log('doPost chamado. Dados recebidos:', postData.substring(0, 200) + '...');
+    
+    let data;
+    try {
+      data = JSON.parse(postData);
+    } catch (error) {
+      return createErrorResponse('Erro ao fazer parse do JSON: ' + error.toString());
+    }
+    
+    // Validar estrutura
+    if (!data.action) {
+      return createErrorResponse('Campo "action" não encontrado');
+    }
+    
+    if (data.action !== 'save') {
+      return createErrorResponse('Ação não reconhecida: ' + data.action);
+    }
+    
+    // Obter parâmetros
+    const folderId = data.folderId || '16kt50n_MFB60_h3JFgIA408k8YrjU6Rb';
+    const fileName = data.fileName || 'mk_audiovisual_contratos.json';
+    const newData = data.data;
+    
+    if (!newData) {
+      return createErrorResponse('Campo "data" não encontrado');
+    }
+    
+    // Salvar dados
+    return saveData(folderId, fileName, newData);
+    
+  } catch (error) {
+    console.error('Erro em doPost:', error);
+    return createErrorResponse('Erro ao processar POST: ' + error.toString());
+  }
+}
+
+// ============================================
+// FUNÇÃO: Ler Dados do Google Drive
+// ============================================
+function readData(folderId, fileName) {
+  try {
+    console.log('Lendo dados. Pasta:', folderId, 'Arquivo:', fileName);
+    
+    // Obter pasta
+    let folder;
+    try {
+      folder = DriveApp.getFolderById(folderId);
+    } catch (error) {
+      return createErrorResponse('Pasta não encontrada. Verifique o ID: ' + folderId);
+    }
+    
+    // Procurar arquivo
+    const files = folder.getFilesByName(fileName);
+    
+    if (!files.hasNext()) {
+      // Arquivo não existe, retornar estrutura vazia
+      console.log('Arquivo não encontrado, retornando estrutura vazia');
+      return createSuccessResponse({
+        contratos: [],
+        ultima_atualizacao: null
+      }, 0);
+    }
+    
+    // Ler arquivo
+    const file = files.next();
+    const content = file.getBlob().getDataAsString();
+    
+    let jsonData;
+    try {
+      jsonData = JSON.parse(content);
+    } catch (error) {
+      console.error('Erro ao fazer parse do JSON:', error);
+      return createErrorResponse('Arquivo JSON inválido: ' + error.toString());
+    }
+    
+    // Garantir estrutura correta
+    if (!jsonData.contratos) {
+      jsonData.contratos = [];
+    }
+    
+    const total = jsonData.contratos.length;
+    console.log('Dados lidos com sucesso. Total de contratos:', total);
+    
+    return createSuccessResponse(jsonData, total);
+    
+  } catch (error) {
+    console.error('Erro ao ler dados:', error);
+    return createErrorResponse('Erro ao ler dados: ' + error.toString());
+  }
+}
+
+// ============================================
+// FUNÇÃO: Salvar Dados no Google Drive
+// ============================================
+function saveData(folderId, fileName, newData) {
+  try {
+    console.log('Salvando dados. Pasta:', folderId, 'Arquivo:', fileName);
+    console.log('Novo contrato ID:', newData.id_evento);
+    
+    // Obter pasta
+    let folder;
+    try {
+      folder = DriveApp.getFolderById(folderId);
+    } catch (error) {
+      return createErrorResponse('Pasta não encontrada. Verifique o ID: ' + folderId);
+    }
+    
+    // Procurar arquivo existente
+    let file = null;
+    let existingData = { contratos: [] };
+    
+    const files = folder.getFilesByName(fileName);
+    if (files.hasNext()) {
+      file = files.next();
+      try {
+        const content = file.getBlob().getDataAsString();
+        if (content && content.trim() !== '') {
+          existingData = JSON.parse(content);
+        }
+      } catch (error) {
+        console.warn('Erro ao ler arquivo existente, criando novo:', error);
+        existingData = { contratos: [] };
+      }
+    }
+    
+    // Garantir estrutura correta
+    if (!existingData.contratos) {
+      existingData.contratos = [];
+    }
+    
+    // Verificar se o contrato já existe (por ID)
+    const idEvento = newData.id_evento;
+    const indexExistente = existingData.contratos.findIndex(c => c.id_evento === idEvento);
+    
+    if (indexExistente >= 0) {
+      // Atualizar contrato existente
+      console.log('Atualizando contrato existente no índice:', indexExistente);
+      existingData.contratos[indexExistente] = newData;
+    } else {
+      // Adicionar novo contrato
+      console.log('Adicionando novo contrato');
+      existingData.contratos.push(newData);
+    }
+    
+    // Atualizar timestamp
+    existingData.ultima_atualizacao = new Date().toISOString();
+    
+    // Converter para JSON
+    const jsonString = JSON.stringify(existingData, null, 2);
+    
+    // Salvar arquivo
+    if (file) {
+      // Atualizar arquivo existente
+      file.setContent(jsonString);
+      console.log('Arquivo atualizado com sucesso');
+    } else {
+      // Criar novo arquivo
+      file = folder.createFile(fileName, jsonString, 'application/json');
+      console.log('Arquivo criado com sucesso');
+    }
+    
+    const total = existingData.contratos.length;
+    console.log('Salvamento concluído. Total de contratos:', total);
+    
+    return createSuccessResponse({
+      message: 'Contrato salvo com sucesso!',
+      total: total,
+      folderId: folderId,
+      fileName: fileName,
+      id_evento: idEvento
+    }, total);
+    
+  } catch (error) {
+    console.error('Erro ao salvar dados:', error);
+    return createErrorResponse('Erro ao salvar dados: ' + error.toString());
+  }
+}
+
+// ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
+
+// Criar resposta de sucesso
+function createSuccessResponse(data, total) {
+  const response = {
+    success: true,
+    data: data,
+    total: total || (data.contratos ? data.contratos.length : 0),
+    timestamp: new Date().toISOString()
+  };
+  
+  // Se data já tem contratos, incluir na resposta
+  if (data.contratos) {
+    response.ultima_atualizacao = data.ultima_atualizacao;
+  }
+  
+  const output = ContentService
+    .createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+  
+  // Adicionar headers CORS
+  return output;
+}
+
+// Criar resposta de erro
+function createErrorResponse(errorMessage) {
+  const response = {
+    success: false,
+    error: errorMessage,
+    timestamp: new Date().toISOString()
+  };
+  
+  const output = ContentService
+    .createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+  
+  return output;
+}
+
